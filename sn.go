@@ -4,10 +4,23 @@ import (
 	"fmt"
 	"html/template"
 	"math/rand"
+	"os"
 	"time"
 )
 
 //var store = sessions.NewCookieStore([]byte("slothninja-games-rocks"))
+
+const (
+	NODE_ENV   = "NODE_ENV"
+	production = "production"
+)
+
+// IsProduction returns true if NODE_ENV environment variable is equal to "production".
+// GAE sets NODE_ENV environement to "production" on deployment.
+// NODE_ENV can be overridden in app.yaml configuration.
+func IsProduction() bool {
+	return os.Getenv(NODE_ENV) == production
+}
 
 type VError struct {
 	msgs []string
