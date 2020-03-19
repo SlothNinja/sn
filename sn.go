@@ -11,8 +11,9 @@ import (
 //var store = sessions.NewCookieStore([]byte("slothninja-games-rocks"))
 
 const (
-	NODE_ENV   = "NODE_ENV"
-	production = "production"
+	GAE_VERSION = "GAE_VERSION"
+	NODE_ENV    = "NODE_ENV"
+	production  = "production"
 )
 
 // IsProduction returns true if NODE_ENV environment variable is equal to "production".
@@ -20,6 +21,10 @@ const (
 // NODE_ENV can be overridden in app.yaml configuration.
 func IsProduction() bool {
 	return os.Getenv(NODE_ENV) == production
+}
+
+func VersionID() string {
+	return os.Getenv(GAE_VERSION)
 }
 
 type VError struct {
