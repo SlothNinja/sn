@@ -11,6 +11,6 @@ var (
 	ErrUserNotFound       = fmt.Errorf("current user not found: %w", ErrValidation)
 	ErrPlayerNotFound     = fmt.Errorf("player not found: %w", ErrValidation)
 	ErrActionNotPerformed = fmt.Errorf("player has yet to perform an action: %w", ErrValidation)
-	ErrNotCPorAdmin       = fmt.Errorf("not current player or admin: %w", ErrValidation)
-	ErrNotAdmin           = fmt.Errorf("not admin: %w", ErrValidation)
+	ErrNotAdmin           = fmt.Errorf("current user is not admin: %w", ErrValidation)
+	ErrNotCurrentPlayer   = fmt.Errorf("current user is not current player: %w", ErrValidation)
 )

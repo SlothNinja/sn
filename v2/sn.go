@@ -90,3 +90,25 @@ var MyRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 //	dec := gob.NewDecoder(buf)
 //	return dec.Decode(dst)
 //}
+
+const day = 24 * time.Hour
+const month = 31 * day
+const year = 365 * day
+
+func LastUpdated(v time.Time) string {
+	duration := time.Since(v)
+	switch {
+	case duration < time.Minute:
+		return fmt.Sprintf("%.0f sec", duration.Seconds())
+	case duration < time.Hour:
+		return fmt.Sprintf("%.0f min", duration.Minutes())
+	case duration < day:
+		return fmt.Sprintf("%.0f hour", duration.Hours())
+	case duration < month:
+		return fmt.Sprintf("%.0f day", duration.Hours()/24)
+	case duration < year:
+		return fmt.Sprintf("%0.f month", duration.Hours()/(24*31))
+	default:
+		return fmt.Sprintf("%d year", duration.Hours()/(24*31*365))
+	}
+}

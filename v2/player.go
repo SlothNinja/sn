@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/SlothNinja/color"
-	"github.com/SlothNinja/user/v2"
 )
 
 type Comparison int
@@ -18,7 +17,6 @@ const (
 const NoPlayerID int = -1
 
 type Player struct {
-	User            *user.User   `json:"user"`
 	ID              int          `form:"id" json:"id"`
 	PerformedAction bool         `form:"performed-action" json:"performed-action"`
 	Score           int          `form:"score" json:"score"`

@@ -8,6 +8,7 @@ require (
 	github.com/SlothNinja/glicko v1.0.0
 	github.com/SlothNinja/log v0.0.2
 	github.com/SlothNinja/restful v1.0.0
+	github.com/SlothNinja/sn v1.0.0 // indirect
 	github.com/SlothNinja/user/v2 v2.0.0-alpha.8
 	github.com/gin-gonic/gin v1.6.2
 	google.golang.org/api v0.22.0
