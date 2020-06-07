@@ -8,9 +8,9 @@ require (
 	github.com/SlothNinja/glicko v1.0.0
 	github.com/SlothNinja/log v0.0.2
 	github.com/SlothNinja/restful v1.0.0
-	github.com/SlothNinja/sn v1.0.0 // indirect
-	github.com/SlothNinja/user/v2 v2.0.0-alpha.8
+	github.com/SlothNinja/user/v2 v2.0.0-alpha.9
 	github.com/gin-gonic/gin v1.6.2
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 	google.golang.org/api v0.22.0
 	google.golang.org/genproto v0.0.0-20200423170343-7949de9c1215
 )

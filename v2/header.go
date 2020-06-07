@@ -8,6 +8,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
 	"github.com/SlothNinja/user/v2"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Header provides fields common to all games.
@@ -16,7 +17,7 @@ type Header struct {
 	Title            string           `form:"title" json:"title"`
 	Turn             int              `form:"turn" json:"turn" binding:"min=0"`
 	NumPlayers       int              `form:"num-players" json:"numPlayers" binding"min=0,max=5"`
-	Password         string           `form:"password" json:"-"`
+	Password         []byte           `form:"password" json:"-"`
 	DefaultColors    []string         `form:"default-colors" json:"defaultColors"`
 	CreatorKey       *datastore.Key   `form:"creator-key" json:"creatorKey"`
 	CreatorName      string           `form:"creator-name" json:"creatorName"`
@@ -63,7 +64,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Creator:     ToUser(h.CreatorKey, h.CreatorName, h.CreatorEmailHash),
 		Users:       toUsers(h.UserKeys, h.UserNames, h.UserEmailHashes),
 		LastUpdated: LastUpdated(h.UpdatedAt),
-		Public:      h.Password == "",
+		Public:      len(h.Password) == 0,
 	})
 }
 
@@ -132,7 +133,7 @@ func (h *Header) AddUser(u *user.User) {
 }
 
 // Returns (true, nil) if game should be started
-func (h *Header) Accept(u *user.User, pwd string) (bool, error) {
+func (h *Header) Accept(u *user.User, pwd []byte) (bool, error) {
 	err := h.validateAccept(u, pwd)
 	if err != nil {
 		return false, err
@@ -145,14 +146,20 @@ func (h *Header) Accept(u *user.User, pwd string) (bool, error) {
 	return false, nil
 }
 
-func (h *Header) validateAccept(u *user.User, pwd string) error {
+func (h *Header) validateAccept(u *user.User, pwd []byte) error {
 	switch {
 	case len(h.UserKeys) >= int(h.NumPlayers):
 		return fmt.Errorf("game already has the maximum number of players: %w", ErrValidation)
 	case h.HasUser(u.ID()):
 		return fmt.Errorf("%s has already accepted this invitation: %w", u.Name, ErrValidation)
-	case h.Password != "" && pwd != h.Password:
-		return fmt.Errorf("%s provided incorrect password for Game %s: %w", u.Name, h.Title, ErrValidation)
+	case len(h.Password) != 0:
+		err := bcrypt.CompareHashAndPassword(h.Password, pwd)
+		if err != nil {
+			log.Warningf(err.Error())
+			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
+				u.Name, h.Title, ErrValidation)
+		}
+		return nil
 	default:
 		return nil
 	}
