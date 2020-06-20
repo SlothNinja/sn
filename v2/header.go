@@ -14,29 +14,29 @@ import (
 // Header provides fields common to all games.
 type Header struct {
 	Type             Type             `json:"type"`
-	Title            string           `form:"title" json:"title"`
-	Turn             int              `form:"turn" json:"turn" binding:"min=0"`
-	NumPlayers       int              `form:"num-players" json:"numPlayers" binding"min=0,max=5"`
-	Password         []byte           `form:"password" json:"-"`
-	DefaultColors    []string         `form:"default-colors" json:"defaultColors"`
-	CreatorKey       *datastore.Key   `form:"creator-key" json:"creatorKey"`
-	CreatorName      string           `form:"creator-name" json:"creatorName"`
-	CreatorEmail     string           `form:"creator-email" json:"creatorEmail"`
-	CreatorEmailHash string           `form:"creator-email-hash" json:"creatorEmailHash"`
-	UserKeys         []*datastore.Key `form:"user-keys" json:"userKeys"`
-	UserNames        []string         `form:"user-names" json:"userNames"`
-	UserEmails       []string         `form:"user-emails" json:"userEmails"`
-	UserEmailHashes  []string         `form:"user-emails-hashes" json:"userEmailHashes"`
-	UserColors       []string         `form:"user-colors" json:"userColors"`
-	OrderIDS         []int            `form:"order-ids" json:"-"`
-	CPIDS            []int            `form:"cpIDS" json:"cpids"`
-	WinnerIDS        []int            `form:"winner-ids" json:"winnerIndices"`
-	Status           Status           `form:"status" json:"status"`
+	Title            string           `json:"title"`
+	Turn             int              `json:"turn" binding:"min=0"`
+	NumPlayers       int              `json:"numPlayers" binding"min=0,max=5"`
+	Password         []byte           `json:"-"`
+	DefaultColors    []string         `json:"defaultColors"`
+	CreatorKey       *datastore.Key   `json:"creatorKey"`
+	CreatorName      string           `json:"creatorName"`
+	CreatorEmail     string           `json:"creatorEmail"`
+	CreatorEmailHash string           `json:"creatorEmailHash"`
+	UserKeys         []*datastore.Key `json:"userKeys"`
+	UserNames        []string         `json:"userNames"`
+	UserEmails       []string         `json:"userEmails"`
+	UserEmailHashes  []string         `json:"userEmailHashes"`
+	UserColors       []string         `json:"userColors"`
+	OrderIDS         []int            `json:"-"`
+	CPIDS            []int            `json:"cpids"`
+	WinnerKeys       []*datastore.Key `json:"winnerKeys"`
+	Status           Status           `json:"status"`
 	Undo             Stack            `json:"undo"`
-	SavedState       []byte           `datastore:"SavedState,noindex" json:"-"`
-	CreatedAt        time.Time        `form:"created-at" json:"createdAt"`
-	UpdatedAt        time.Time        `form:"updated-at" json:"updatedAt"`
-	StartedAt        time.Time        `form:"started-at" json:"startedAt"`
+	SavedState       []byte           `json:"-" datastore:"SavedState,noindex"`
+	CreatedAt        time.Time        `json:"createdAt"`
+	UpdatedAt        time.Time        `json:"updatedAt"`
+	StartedAt        time.Time        `json:"startedAt"`
 }
 
 func (h Header) MarshalJSON() ([]byte, error) {
