@@ -112,7 +112,7 @@ func (r *CurrentRating) Rank() *glicko.Rank {
 	}
 }
 
-func NewRating(c *gin.Context, id int64, pk *datastore.Key, t Type, params ...float64) *Rating {
+func NewRating(id int64, pk *datastore.Key, t Type, params ...float64) *Rating {
 	r, rd := defaultR, defaultRD
 	if len(params) == 2 {
 		r, rd = params[0], params[1]
@@ -128,7 +128,7 @@ func NewRating(c *gin.Context, id int64, pk *datastore.Key, t Type, params ...fl
 	return rating
 }
 
-func NewCurrent(c *gin.Context, pk *datastore.Key, t Type, params ...float64) *CurrentRating {
+func NewCurrent(pk *datastore.Key, t Type, params ...float64) *CurrentRating {
 	r, rd := defaultR, defaultRD
 	if len(params) == 2 {
 		r, rd = params[0], params[1]
@@ -175,7 +175,7 @@ func (cl Client) GetMulti(c *gin.Context, uKeys []*datastore.Key, t Type) (Curre
 	ratings := make(CurrentRatings, l)
 	ks := make([]*datastore.Key, l)
 	for i, uKey := range uKeys {
-		ratings[i] = NewCurrent(c, uKey, t)
+		ratings[i] = NewCurrent(uKey, t)
 		ks[i] = ratings[i].Key
 	}
 
@@ -206,7 +206,7 @@ func (cl Client) GetAll(c *gin.Context, uKey *datastore.Key) (CurrentRatings, er
 	rs := make(CurrentRatings, l)
 	ks := make([]*datastore.Key, l)
 	for i, t := range Types {
-		rs[i] = NewCurrent(c, uKey, t)
+		rs[i] = NewCurrent(uKey, t)
 		ks[i] = rs[i].Key
 	}
 
@@ -254,14 +254,14 @@ func (rs CurrentRatings) Projected(c *gin.Context, cm ContestMap) (CurrentRating
 	ratings := make(CurrentRatings, len(rs))
 	for i, r := range rs {
 		var err error
-		if ratings[i], err = r.Projected(c, cm[r.Type]); err != nil {
+		if ratings[i], err = r.Projected(cm[r.Type]); err != nil {
 			return nil, err
 		}
 	}
 	return ratings, nil
 }
 
-func (r *CurrentRating) Projected(c *gin.Context, cs []*Contest) (*CurrentRating, error) {
+func (r *CurrentRating) Projected(cs []*Contest) (*CurrentRating, error) {
 	log.Debugf("Entering")
 	defer log.Debugf("Exiting")
 
@@ -280,7 +280,7 @@ func (r *CurrentRating) Projected(c *gin.Context, cs []*Contest) (*CurrentRating
 		return nil, err
 	}
 
-	return NewCurrent(c, r.Key.Parent, r.Type, rating.R, rating.RD), nil
+	return NewCurrent(r.Key.Parent, r.Type, rating.R, rating.RD), nil
 }
 
 func (r *CurrentRating) Generated() bool {
@@ -369,7 +369,7 @@ func (cl Client) getProjected(c *gin.Context, rs CurrentRatings) (CurrentRatings
 			return nil, err
 		}
 
-		ps[i], err = r.Projected(c, cs)
+		ps[i], err = r.Projected(cs)
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +399,7 @@ func (cl Client) GetProjectedRating(c *gin.Context, ukey *datastore.Key, t Type)
 		return r, nil
 	}
 
-	return r.Projected(c, cs)
+	return r.Projected(cs)
 }
 
 // func (cl Client) For(c *gin.Context, ukey *datastore.Key, t Type) (*CurrentRating, error) {
@@ -481,7 +481,7 @@ func (cl Client) updateUser(c *gin.Context) {
 
 	}
 
-	p, err := r.Projected(c, cs)
+	p, err := r.Projected(cs)
 	if err != nil {
 		log.Errorf(err.Error())
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -504,7 +504,7 @@ func (cl Client) updateUser(c *gin.Context) {
 	)
 
 	if !p.Generated() {
-		r := NewRating(c, 0, p.Key.Parent, p.Type, p.R, p.RD)
+		r := NewRating(0, p.Key.Parent, p.Type, p.R, p.RD)
 		es = append(es, p, r)
 		ks = append(ks, p.Key, r.Key)
 
