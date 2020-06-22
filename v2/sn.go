@@ -113,24 +113,27 @@ func LastUpdated(v time.Time) string {
 	}
 }
 
-func ToSentence(strings []string) (sentence string) {
-	switch length := len(strings); length {
+func ToSentence(strings []string) string {
+	l := len(strings)
+	switch l {
 	case 0:
+		return ""
 	case 1:
-		sentence = strings[0]
+		return strings[0]
 	case 2:
-		sentence = strings[0] + " and " + strings[1]
+		return strings[0] + " and " + strings[1]
 	default:
+		sentence := ""
 		for i, s := range strings {
 			switch i {
 			case 0:
 				sentence += s
-			case length - 1:
+			case l - 1:
 				sentence += ", and " + s
 			default:
 				sentence += ", " + s
 			}
 		}
+		return sentence
 	}
-	return sentence
 }
