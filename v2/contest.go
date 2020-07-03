@@ -57,12 +57,12 @@ func New(c *gin.Context, id int64, pk *datastore.Key, gid int64, t Type, r, rd, 
 	}
 }
 
-func GenContests(c *gin.Context, places Places) []*Contest {
-	var cs []*Contest
+func GenContests(c *gin.Context, places Places) map[*datastore.Key][]*Contest {
+	cs := make(map[*datastore.Key][]*Contest)
 	for _, rmap := range places {
 		for ukey, rs := range rmap {
 			for _, r := range rs {
-				cs = append(cs, New(c, 0, ukey, r.GameID, r.Type, r.R, r.RD, r.Outcome))
+				cs[ukey] = append(cs[ukey], New(c, 0, ukey, r.GameID, r.Type, r.R, r.RD, r.Outcome))
 			}
 		}
 	}
