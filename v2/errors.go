@@ -3,6 +3,10 @@ package sn
 import (
 	"errors"
 	"fmt"
+	"net/http"
+
+	"github.com/SlothNinja/log"
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -14,3 +18,12 @@ var (
 	ErrNotAdmin           = fmt.Errorf("current user is not admin: %w", ErrValidation)
 	ErrNotCurrentPlayer   = fmt.Errorf("current user is not current player: %w", ErrValidation)
 )
+
+func JErr(c *gin.Context, err error) {
+	if errors.Is(err, ErrValidation) {
+		c.JSON(http.StatusOK, gin.H{"message": err.Error()})
+		return
+	}
+	log.Debugf(err.Error())
+	c.JSON(http.StatusOK, gin.H{"message": ErrUnexpected.Error()})
+}

@@ -1,25 +1,23 @@
 package sn
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/codec"
-	"github.com/SlothNinja/color"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/restful"
-	"github.com/SlothNinja/user/v2"
 	"github.com/gin-gonic/gin"
 )
 
 type MLog struct {
-	Key        *datastore.Key `datastore:"__key__"`
-	Messages   `datastore:"-"`
-	SavedState []byte `datastore:",noindex"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	Key        *datastore.Key `datastore:"__key__" json:"key"`
+	Messages   []*Message     `datastore:"-" json:"-"`
+	SavedState string         `datastore:",noindex" json:"messages"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
 }
 
 func (ml *MLog) Load(ps []datastore.Property) error {
@@ -31,8 +29,8 @@ func (ml *MLog) Load(ps []datastore.Property) error {
 		return err
 	}
 
-	var ms Messages
-	err = codec.Decode(&ms, ml.SavedState)
+	var ms []*Message
+	err = json.Unmarshal([]byte(ml.SavedState), &ms)
 	if err != nil {
 		return err
 	}
@@ -44,11 +42,11 @@ func (ml *MLog) Save() ([]datastore.Property, error) {
 	log.Debugf(msgEnter)
 	defer log.Debugf(msgExit)
 
-	v, err := codec.Encode(ml.Messages)
+	bs, err := json.Marshal(ml.Messages)
 	if err != nil {
 		return nil, err
 	}
-	ml.SavedState = v
+	ml.SavedState = string(bs)
 	return datastore.SaveStruct(ml)
 }
 
@@ -61,79 +59,71 @@ func NewMLog(id int64) *MLog {
 	return &MLog{Key: datastore.IDKey(mlogKind, id, nil)}
 }
 
-func (client Client) AddMessage(prefix string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		log.Debugf(msgEnter)
-		defer log.Debugf(msgExit)
-
-		ml := From(c)
-		if ml == nil {
-			log.Errorf("Missing messagelog.")
-			restful.AddErrorf(c, "Missing messagelog.")
-			c.HTML(http.StatusOK, "shared/flashbox", gin.H{
-				"Notices": restful.NoticesFrom(c),
-				"Errors":  restful.ErrorsFrom(c),
-			})
-			return
-		}
-		m := ml.NewMessage(c)
-		m.Text = c.PostForm("message")
-		creatorsid := c.PostForm("creatorid")
-		if creatorsid != "" {
-			intID, err := strconv.ParseInt(creatorsid, 10, 64)
-			if err != nil {
-				restful.AddErrorf(c, "Invalid value received for creatorsid: %v", creatorsid)
-				c.HTML(http.StatusOK, "shared/flashbox", gin.H{
-					"Notices": restful.NoticesFrom(c),
-					"Errors":  restful.ErrorsFrom(c),
-				})
-				return
-			}
-			m.CreatorID = intID
-		}
-		_, err := client.DS.Put(c, ml.Key, ml)
-		if err != nil {
-			restful.AddErrorf(c, err.Error())
-			log.Errorf(err.Error())
-			c.HTML(http.StatusOK, "shared/flashbox", gin.H{
-				"Notices": restful.NoticesFrom(c),
-				"Errors":  restful.ErrorsFrom(c),
-			})
-			return
-		}
-		c.HTML(http.StatusOK, "shared/message", gin.H{
-			"message": m,
-			"ctx":     c,
-			"map":     color.MapFrom(c),
-			"link":    user.CurrentFrom(c).Link(),
-		})
-	}
-}
-
-func getID(c *gin.Context) (int64, error) {
-	sid := c.Param("hid")
-	return strconv.ParseInt(sid, 10, 64)
-}
-
-func (client Client) GetMLog(c *gin.Context) {
+func (cl Client) AddMessage(c *gin.Context) {
 	log.Debugf(msgEnter)
 	defer log.Debugf(msgExit)
 
 	id, err := getID(c)
 	if err != nil {
-		restful.AddErrorf(c, err.Error())
-		c.Redirect(http.StatusSeeOther, homePath)
+		JErr(c, err)
 		return
 	}
 
-	ml := NewMLog(id)
-	err = client.DS.Get(c, ml.Key, ml)
+	ml, err := cl.getMLog(c, id)
 	if err != nil {
-		restful.AddErrorf(c, "Unable to get message log with ID: %v", id)
-		c.Redirect(http.StatusSeeOther, homePath)
+		JErr(c, fmt.Errorf("unable to get message log with ID: %v", id))
 		return
 	}
-	with(c, ml)
+
+	obj := struct {
+		Creator User   `json:"creator"`
+		Message string `json:"message"`
+	}{}
+
+	err = c.ShouldBind(&obj)
+	if err != nil {
+		JErr(c, err)
+		return
+	}
+
+	m := ml.NewMessage(c)
+	m.Text = obj.Message
+	m.Creator = obj.Creator
+	_, err = cl.DS.Put(c, ml.Key, ml)
+	if err != nil {
+		JErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": m})
+}
+
+func getID(c *gin.Context) (int64, error) {
+	sid := c.Param("id")
+	return strconv.ParseInt(sid, 10, 64)
+}
+
+func (cl Client) getMLog(c *gin.Context, id int64) (*MLog, error) {
+	ml := NewMLog(id)
+	err := cl.DS.Get(c, ml.Key, ml)
+	return ml, err
+}
+
+func (cl Client) GetMLog(c *gin.Context) {
+	log.Debugf(msgEnter)
+	defer log.Debugf(msgExit)
+
+	id, err := getID(c)
+	if err != nil {
+		JErr(c, err)
+		return
+	}
+
+	ml, err := cl.getMLog(c, id)
+	if err != nil {
+		JErr(c, fmt.Errorf("unable to get message log with ID: %v: %w", id, err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"messages": ml.Messages})
 }
 
 func From(c *gin.Context) (ml *MLog) {
