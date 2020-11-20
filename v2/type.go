@@ -3,7 +3,7 @@ package sn
 import (
 	"strings"
 
-	"github.com/SlothNinja/user/v2"
+	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 )
 
