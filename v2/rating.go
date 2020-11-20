@@ -13,7 +13,7 @@ import (
 	"github.com/SlothNinja/glicko"
 	"github.com/SlothNinja/log"
 	"github.com/SlothNinja/restful"
-	"github.com/SlothNinja/user/v2"
+	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/iterator"
 
@@ -292,13 +292,17 @@ func (cl Client) Index(c *gin.Context) {
 	defer log.Debugf("Exiting")
 
 	t := ToType[c.Param("type")]
+	cu, err := user.CurrentFrom(c)
+	if err != nil {
+		log.Debugf(err.Error())
+	}
 	c.HTML(http.StatusOK, "rating/index", gin.H{
 		"Type":      t,
 		"Heading":   "Ratings: " + t.String(),
 		"Types":     Types,
 		"Context":   c,
 		"VersionID": VersionID(),
-		"CUser":     user.CurrentFrom(c),
+		"CUser":     cu,
 	})
 }
 

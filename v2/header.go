@@ -7,7 +7,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user/v2"
+	"github.com/SlothNinja/user"
 	"golang.org/x/crypto/bcrypt"
 )
 
