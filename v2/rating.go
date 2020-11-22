@@ -712,7 +712,7 @@ func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCo
 	for i, r := range rs {
 		if p := ps[i]; !p.generated {
 			table.Data = append(table.Data, &jCombined{
-				Gravatar:  user.Gravatar(u),
+				Gravatar:  user.Gravatar(u, "80"),
 				Name:      u.Link(),
 				Type:      template.HTML(r.Type.String()),
 				Current:   template.HTML(r.String()),
@@ -743,7 +743,7 @@ func toCombined(c *gin.Context, us []*user.User, rs, ps CurrentRatings, o int32,
 		if !r.generated {
 			table.Data = append(table.Data, &jCombined{
 				Rank:      i + int(o) + 1,
-				Gravatar:  user.Gravatar(us[i]),
+				Gravatar:  user.Gravatar(us[i], "80"),
 				Name:      us[i].Link(),
 				Type:      template.HTML(r.Type.String()),
 				Current:   template.HTML(r.String()),

@@ -52,8 +52,8 @@ github.com/SlothNinja/restful v1.0.0 h1:Qcozj0/B5wLSAOec2qqphCXmAiBW3yr3LzEcYEaJ
 github.com/SlothNinja/restful v1.0.0/go.mod h1:0Pm+cPyoDezRedyM2X9rmP9l/sg1rgYKTaKnw1wRj9A=
 github.com/SlothNinja/sn v1.0.0 h1:OFawz2eTO6NuYGKuKUMn43RY0U/Y1V7BD5DCJXFLe58=
 github.com/SlothNinja/sn v1.0.0/go.mod h1:LpLTLYlEk9jsJG6521A2BwK27aqivJCb60swj3v605s=
-github.com/SlothNinja/user v1.0.4 h1:lBRdoSMDXJH50ZLhW1vMIJ9vazqPZuEFaNUIkaxjmqc=
-github.com/SlothNinja/user v1.0.4/go.mod h1:f7DpM0j2bxY5SL4hLPZ+nic5RVGYry2yTNhsSyew7po=
+github.com/SlothNinja/user v1.0.6 h1:Zv3sHPsT6lHIbdH6W3UDwvrkmv4kKN2zfcV7P4MBZsk=
+github.com/SlothNinja/user v1.0.6/go.mod h1:uk0GbfFclnGiQlSDkqLukCiLNdmXb28MeSzwtmF/2KY=
 github.com/boj/redistore v0.0.0-20180917114910-cd5dcc76aeff/go.mod h1:+RTT1BOk5P97fT2CiHkbFQwkK3mjsFAP6zCYV2aXtjw=
 github.com/bradfitz/gomemcache v0.0.0-20190329173943-551aad21a668/go.mod h1:H0wQNHz2YrLsuXOZozoeDmnHXkNCRmMW0gwFWDfEZDA=
 github.com/bradleypeabody/gorilla-sessions-memcache v0.0.0-20181103040241-659414f458e1/go.mod h1:dkChI7Tbtx7H1Tj7TqGSZMOeGpMP5gLHtjroHd4agiI=
@@ -417,10 +417,8 @@ golang.org/x/tools v0.0.0-20200904185747-39188db58858 h1:xLt+iB5ksWcZVxqc+g9K41Z
 golang.org/x/tools v0.0.0-20200904185747-39188db58858/go.mod h1:Cj7w3i3Rnn0Xh82ur9kSqwfTHTeVxaDqrfMjpcNT6bE=
 golang.org/x/tools v0.0.0-20200916150407-587cf2330ce8/go.mod h1:z6u4i615ZeAfBE4XtMziQW1fSVJXACjjbWkB/mvPzlU=
 golang.org/x/tools v0.0.0-20201110124207-079ba7bd75cd/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
-golang.org/x/tools v0.0.0-20201119191246-c0d5e8918928 h1:+LHV2aUFUaYPoc0UtJjH8u8HlnRsuB9MCdMN2nArRac=
-golang.org/x/tools v0.0.0-20201119191246-c0d5e8918928/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
-golang.org/x/tools v0.0.0-20201120032337-6d151481565c h1:IXtuZap6vTKIQ3jemmcwf2gY4BT+lwfZHBYwxMGe5/k=
-golang.org/x/tools v0.0.0-20201120032337-6d151481565c/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
+golang.org/x/tools v0.0.0-20201121010211-780cb80bd7fb h1:z5+u0pkAUPUWd3taoTialQ2JAMo4Wo1Z3L25U4ZV9r0=
+golang.org/x/tools v0.0.0-20201121010211-780cb80bd7fb/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
