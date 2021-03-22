@@ -25,5 +25,5 @@ func JErr(c *gin.Context, err error) {
 		return
 	}
 	log.Debugf(err.Error())
-	c.JSON(http.StatusOK, gin.H{"message": ErrUnexpected.Error()})
+	c.JSON(http.StatusBadRequest, gin.H{"message": ErrUnexpected.Error()})
 }
