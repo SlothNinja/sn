@@ -6,7 +6,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
-	gtype "github.com/SlothNinja/type"
 	"github.com/SlothNinja/undo"
 	"github.com/SlothNinja/user"
 	"golang.org/x/crypto/bcrypt"
@@ -14,7 +13,7 @@ import (
 
 // Header provides fields common to all games.
 type Header struct {
-	Type                      gtype.Type       `json:"type"`
+	Type                      Type             `json:"type"`
 	Title                     string           `json:"title"`
 	Turn                      int              `json:"turn"`
 	Round                     int              `json:"round"`
