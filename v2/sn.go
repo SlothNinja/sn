@@ -1,5 +1,10 @@
 package sn
 
+import (
+	"math/rand"
+	"time"
+)
+
 // //var store = sessions.NewCookieStore([]byte("slothninja-games-rocks"))
 //
 // const (
@@ -65,7 +70,7 @@ package sn
 // 	return m
 // }
 //
-// var MyRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var MyRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 //func Encode(src interface{}) ([]byte, error) {
 //	buf := new(bytes.Buffer)
