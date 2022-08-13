@@ -25,6 +25,10 @@ func IsProduction() bool {
 	return os.Getenv(NODE_ENV) == production
 }
 
+func VersionID() string {
+	return os.Getenv(GAE_VERSION)
+}
+
 type Client struct {
 	DS     *datastore.Client
 	Log    *log.Logger
