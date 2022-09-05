@@ -24,7 +24,17 @@ const (
 	GAE_VERSION = "GAE_VERSION"
 	NODE_ENV    = "NODE_ENV"
 	production  = "production"
+	idParam     = "id"
+	rootKind    = "Root"
 )
+
+func GetID(c *gin.Context) (int64, error) {
+	return strconv.ParseInt(c.Param(idParam), 10, 64)
+}
+
+func RootKey(id int64) *datastore.Key {
+	return datastore.IDKey(rootKind, id, nil)
+}
 
 // IsProduction returns true if NODE_ENV environment variable is equal to "production".
 // GAE sets NODE_ENV environement to "production" on deployment.

@@ -5,6 +5,8 @@ go 1.16
 require (
 	cloud.google.com/go/cloudtasks v1.4.0
 	cloud.google.com/go/datastore v1.8.0
+	cloud.google.com/go/firestore v1.6.1 // indirect
+	firebase.google.com/go v3.13.0+incompatible
 	github.com/SlothNinja/client v1.0.2
 	github.com/SlothNinja/gin-render v1.0.0
 	github.com/SlothNinja/glicko v1.0.0
