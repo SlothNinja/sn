@@ -58,12 +58,12 @@ func TextColorFor(background Color) Color {
 
 type ColorMap map[int]Color
 
-func MapFrom(c *gin.Context) (cm ColorMap) {
+func ColorMapFrom(c *gin.Context) (cm ColorMap) {
 	cm, _ = c.Value(cmKey).(ColorMap)
 	return
 }
 
-func WithMap(c *gin.Context, cm ColorMap) *gin.Context {
+func WithColorMap(c *gin.Context, cm ColorMap) *gin.Context {
 	c.Set(cmKey, cm)
 	return c
 }
