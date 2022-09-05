@@ -12,7 +12,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/sn"
 	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/iterator"
@@ -63,14 +62,14 @@ func (client *Client) Index(prefix string) gin.HandlerFunc {
 		case Recruiting:
 			c.HTML(http.StatusOK, "shared/invitation_index", gin.H{
 				"Context":   c,
-				"VersionID": sn.VersionID(),
+				"VersionID": VersionID(),
 				"CUser":     cu,
 				"Games":     gs,
 			})
 		default:
 			c.HTML(http.StatusOK, "shared/multi_games_index", gin.H{
 				"Context":   c,
-				"VersionID": sn.VersionID(),
+				"VersionID": VersionID(),
 				"CUser":     cu,
 				"Games":     gs,
 				"Status":    status,
@@ -90,7 +89,7 @@ func (client *Client) JIndex(c *gin.Context) {
 
 	err := c.ShouldBind(&options)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -98,13 +97,13 @@ func (client *Client) JIndex(c *gin.Context) {
 
 	cu, err := client.User.Current(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	forward, err := datastore.DecodeCursor(options.Forward)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -116,7 +115,7 @@ func (client *Client) JIndex(c *gin.Context) {
 
 	cnt, err := client.DS.Count(c, q)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -135,7 +134,7 @@ func (client *Client) JIndex(c *gin.Context) {
 			break
 		}
 		if err != nil {
-			sn.JErr(c, err)
+			JErr(c, err)
 			return
 		}
 		es = append(es, &withID{&gh})
@@ -143,7 +142,7 @@ func (client *Client) JIndex(c *gin.Context) {
 
 	forward, err = it.Cursor()
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -398,7 +397,7 @@ type GOptions struct {
 	Kind         string
 	Forward      datastore.Cursor
 	Status       Status
-	Type         sn.Type
+	Type         Type
 	UserID       int64
 }
 
@@ -411,7 +410,7 @@ func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, 
 		Filter("Status=", int(opt.Status)).
 		Order("-UpdatedAt")
 
-	if opt.Type != sn.All && opt.Type != sn.NoType {
+	if opt.Type != All && opt.Type != NoType {
 		q = q.Filter("Type=", int(opt.Type))
 	}
 

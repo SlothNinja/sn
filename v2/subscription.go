@@ -12,7 +12,6 @@ import (
 	"firebase.google.com/go/messaging"
 	"github.com/SlothNinja/client"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/sn"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/option"
 )
@@ -199,13 +198,13 @@ func (cl *SubscriptionClient) SubscribeHandler(c *gin.Context) {
 
 	token, err := GetSubscriptionToken(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	s, err := cl.Get(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -213,7 +212,7 @@ func (cl *SubscriptionClient) SubscribeHandler(c *gin.Context) {
 	if changed {
 		_, err := cl.Put(c, s)
 		if err != nil {
-			sn.JErr(c, err)
+			JErr(c, err)
 			return
 		}
 	}
@@ -227,13 +226,13 @@ func (cl *SubscriptionClient) UnsubscribeHandler(c *gin.Context) {
 
 	token, err := GetSubscriptionToken(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	s, err := cl.Get(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -243,7 +242,7 @@ func (cl *SubscriptionClient) UnsubscribeHandler(c *gin.Context) {
 		log.Debugf("changed s: %+v", s)
 		_, err := cl.Put(c, s)
 		if err != nil {
-			sn.JErr(c, err)
+			JErr(c, err)
 			return
 		}
 	}
@@ -254,7 +253,7 @@ func (cl *SubscriptionClient) UnsubscribeHandler(c *gin.Context) {
 const fbCreds = "FB_CREDS"
 
 func newMsgClient(ctx context.Context) *messaging.Client {
-	if sn.IsProduction() {
+	if IsProduction() {
 		log.Debugf("production")
 		app, err := firebase.NewApp(ctx, nil)
 		if err != nil {

@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/sn"
 	"github.com/mailjet/mailjet-apiv3-go"
 )
 
@@ -20,7 +19,7 @@ func SendMessages(c context.Context, msgInfo ...mailjet.InfoMessagesV31) (*mailj
 	pub, priv := getMJKeys()
 	mailjetClient := mailjet.NewMailjetClient(pub, priv)
 	msgs := mailjet.MessagesV31{Info: msgInfo}
-	if sn.IsProduction() {
+	if IsProduction() {
 		return mailjetClient.SendMailV31(&msgs)
 	}
 	for _, msg := range msgInfo {

@@ -1,6 +1,7 @@
 package sn
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -24,27 +25,27 @@ import (
 // 	return os.Getenv(GAE_VERSION)
 // }
 //
-// type VError struct {
-// 	msgs []string
-// }
-//
+type VError struct {
+	msgs []string
+}
+
 // func IsVError(err error) bool {
 // 	_, ok := err.(*VError)
 // 	return ok
 // }
 //
-// func NewVError(format string, args ...interface{}) *VError {
-// 	return new(VError).AddMessagef(format, args...)
-// }
-//
-// func (e *VError) Error() string {
-// 	var s string
-// 	for _, msg := range e.msgs {
-// 		s += msg + "\n"
-// 	}
-// 	return s
-// }
-//
+func NewVError(format string, args ...interface{}) *VError {
+	return new(VError).AddMessagef(format, args...)
+}
+
+func (e *VError) Error() string {
+	var s string
+	for _, msg := range e.msgs {
+		s += msg + "\n"
+	}
+	return s
+}
+
 // func (e *VError) Errors() []string {
 // 	return e.msgs
 // }
@@ -53,10 +54,11 @@ import (
 // 	return len(e.msgs) == 0
 // }
 //
-// func (e *VError) AddMessagef(format string, args ...interface{}) *VError {
-// 	e.msgs = append(e.msgs, fmt.Sprintf(format, args...))
-// 	return e
-// }
+func (e *VError) AddMessagef(format string, args ...interface{}) *VError {
+	e.msgs = append(e.msgs, fmt.Sprintf(format, args...))
+	return e
+}
+
 //
 // func (e *VError) AppendMessages(err *VError) {
 // 	e.msgs = append(e.msgs, err.msgs...)

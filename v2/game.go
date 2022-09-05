@@ -5,7 +5,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/sn"
 	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -14,7 +13,7 @@ import (
 type Gamers []Gamer
 type Gamer interface {
 	PhaseName() string
-	FromParams(*gin.Context, *user.User, sn.Type) error
+	FromParams(*gin.Context, *user.User, Type) error
 	ColorMapFor(*user.User) ColorMap
 	headerer
 }
@@ -38,7 +37,7 @@ func (h *Header) GetAcceptDialog() bool {
 func (h *Header) RandomTurnOrder() {
 	ps := h.gamer.(GetPlayerers).GetPlayerers()
 	for i := 0; i < h.NumPlayers; i++ {
-		ri := sn.MyRand.Intn(h.NumPlayers)
+		ri := MyRand.Intn(h.NumPlayers)
 		ps[i], ps[ri] = ps[ri], ps[i]
 	}
 	h.SetCurrentPlayerers(ps[0])
@@ -70,11 +69,11 @@ func (h *Header) Accept(c *gin.Context, u *user.User) (start bool, err error) {
 func (h *Header) validateAccept(c *gin.Context, u *user.User) error {
 	switch {
 	case len(h.UserIDS) >= h.NumPlayers:
-		return sn.NewVError("Game already has the maximum number of players.")
+		return NewVError("Game already has the maximum number of players.")
 	case h.HasUser(u):
-		return sn.NewVError("%s has already accepted this invitation.", u.Name)
+		return NewVError("%s has already accepted this invitation.", u.Name)
 	case h.Password != "" && c.PostForm("password") != h.Password:
-		return sn.NewVError("%s provided incorrect password for Game #%d: %s.", u.Name, h.ID, h.Title)
+		return NewVError("%s provided incorrect password for Game #%d: %s.", u.Name, h.ID, h.Title)
 	}
 	return nil
 }
@@ -97,15 +96,15 @@ func (h *Header) validateAcceptWith(u *user.User, pwd []byte) error {
 	log.Debugf("PasswordHash: %v", h.PasswordHash)
 	switch {
 	case len(h.UserIDS) >= int(h.NumPlayers):
-		return fmt.Errorf("game already has the maximum number of players: %w", sn.ErrValidation)
+		return fmt.Errorf("game already has the maximum number of players: %w", ErrValidation)
 	case h.HasUser(u):
-		return fmt.Errorf("%s has already accepted this invitation: %w", u.Name, sn.ErrValidation)
+		return fmt.Errorf("%s has already accepted this invitation: %w", u.Name, ErrValidation)
 	case len(h.PasswordHash) != 0:
 		err := bcrypt.CompareHashAndPassword(h.PasswordHash, pwd)
 		if err != nil {
 			log.Warningf(err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
-				u.Name, h.Title, sn.ErrValidation)
+				u.Name, h.Title, ErrValidation)
 		}
 		return nil
 	default:
@@ -125,9 +124,9 @@ func (h *Header) Drop(u *user.User) (err error) {
 func (h *Header) validateDrop(u *user.User) (err error) {
 	switch {
 	case h.Status != Recruiting:
-		err = sn.NewVError("Game is no longer recruiting, thus %s can't drop.", u.Name)
+		err = NewVError("Game is no longer recruiting, thus %s can't drop.", u.Name)
 	case !h.HasUser(u):
-		err = sn.NewVError("%s has not joined this game, thus %s can't drop.", u.Name, u.Name)
+		err = NewVError("%s has not joined this game, thus %s can't drop.", u.Name, u.Name)
 	}
 	return
 }

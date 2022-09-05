@@ -11,7 +11,6 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/client"
 	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/sn"
 	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 )
@@ -261,13 +260,13 @@ func (cl *MLogClient) Handler(c *gin.Context) {
 
 	id, err := GetID(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	ml, err := cl.Get(c, id)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -275,7 +274,7 @@ func (cl *MLogClient) Handler(c *gin.Context) {
 	if err == nil {
 		ml, err = cl.UpdateRead(c, ml, cu)
 		if err != nil {
-			sn.JErr(c, err)
+			JErr(c, err)
 			return
 		}
 	}
@@ -292,13 +291,13 @@ func (cl *MLogClient) AddMessageHandler(c *gin.Context) {
 
 	cu, err := cl.User.Current(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	id, err := GetID(c)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
@@ -309,25 +308,25 @@ func (cl *MLogClient) AddMessageHandler(c *gin.Context) {
 
 	err = c.ShouldBind(&obj)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	if obj.Creator.ID() != cu.ID() {
-		sn.JErr(c, fmt.Errorf("invalid creator: %w", sn.ErrValidation))
+		JErr(c, fmt.Errorf("invalid creator: %w", ErrValidation))
 		return
 	}
 
 	ml, err := cl.Get(c, id)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
 	m := ml.AddMessage(cu, obj.Message)
 	_, err = cl.Put(c, id, ml)
 	if err != nil {
-		sn.JErr(c, err)
+		JErr(c, err)
 		return
 	}
 
