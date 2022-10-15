@@ -17,8 +17,8 @@ type Entryer interface {
 
 type Entry struct {
 	gamer         Gamer
-	PlayerID      int
-	OtherPlayerID int
+	PlayerID      PID
+	OtherPlayerID PID
 	TurnF         int
 	PhaseF        Phase
 	SubPhaseF     SubPhase
@@ -71,11 +71,11 @@ func (e *Entry) Round() int {
 }
 
 func (e *Entry) Player() Playerer {
-	return e.gamer.PlayererByID(e.PlayerID)
+	return e.gamer.PlayererByPID(e.PlayerID)
 }
 
 func (e *Entry) OtherPlayer() Playerer {
-	return e.gamer.PlayererByID(e.OtherPlayerID)
+	return e.gamer.PlayererByPID(e.OtherPlayerID)
 }
 
 func (e *Entry) SetOtherPlayer(ps ...Playerer) {

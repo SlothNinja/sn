@@ -42,7 +42,7 @@ func (h *Header) RandomTurnOrder() {
 	}
 	h.SetCurrentPlayerers(ps[0])
 
-	h.OrderIDS = make(UserIndices, len(ps))
+	h.OrderIDS = make([]PID, len(ps))
 	for i, p := range ps {
 		h.OrderIDS[i] = p.ID()
 	}

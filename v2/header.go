@@ -52,10 +52,10 @@ type Header struct {
 	UserEmailHashes           []string         `form:"user-emails" json:"userEmailHashes"`
 	UserEmailNotifications    []bool           `form:"user-email-notifiactions" json:"userEmailNotifications"`
 	UserGravTypes             []string         `form:"user-grav-types" json:"userGravTypes"`
-	OrderIDS                  UserIndices      `form:"order-ids" json:"-"`
-	CPUserIndices             UserIndices      `form:"cp-user-indices" json:"cpUserIndices"`
-	CPIDS                     []int            `json:"cpids"`
-	WinnerIDS                 UserIndices      `form:"winner-ids" json:"winnerIndices"`
+	OrderIDS                  []PID            `form:"order-ids" json:"-"`
+	CPUserIndices             []UIndex         `form:"cp-user-indices" json:"cpUserIndices"`
+	CPIDS                     []PID            `json:"cpids"`
+	WinnerIDS                 []UIndex         `form:"winner-ids" json:"winnerIndices"`
 	WinnerKeys                []*datastore.Key `form:"winner-keys" json:"winnerKeys"`
 	Status                    Status           `form:"status" json:"status"`
 	Undo                      Stack            `json:"undo"`
@@ -100,11 +100,11 @@ type headerer interface {
 	GetHeader() *Header
 	GetAcceptDialog() bool
 	AcceptedPlayers() int
-	PlayererByID(int) Playerer
+	PlayererByPID(PID) Playerer
 	PlayererByUserID(int64) Playerer
 	PlayererByIndex(int) Playerer
 	Winnerers() Playerers
-	User(int) *user.User
+	User(UIndex) *user.User
 	CurrentPlayerers() []Playerer
 	NextPlayerer(...Playerer) Playerer
 	DefaultColorMap() Colors
@@ -138,6 +138,15 @@ func (uis UserIndices) AppendS(indices ...int) UserIndices { return append(uis, 
 func (uis UserIndices) Include(index int) bool {
 	for _, i := range uis {
 		if i == index {
+			return true
+		}
+	}
+	return false
+}
+
+func HasUIndex(uis []UIndex, i UIndex) bool {
+	for _, ui := range uis {
+		if ui == i {
 			return true
 		}
 	}
@@ -272,9 +281,10 @@ func getType(form url.Values) Type {
 	return t
 }
 
-func (h *Header) User(index int) *user.User {
-	i := index
-	if l := len(h.UserIDS); l > 0 {
+func (h *Header) User(index UIndex) *user.User {
+	i := int(index)
+	l := len(h.UserIDS)
+	if l > 0 {
 		i = i % l
 	}
 	return h.Users[i]
@@ -342,29 +352,29 @@ func (h *Header) HasUser(u *user.User) bool {
 
 func (h *Header) RemoveUser(u2 *user.User) {
 	i := h.IndexFor(u2.ID())
-	if i == NotFound {
+	if i == UIndexNotFound {
 		return
 	}
 
-	if i >= 0 && i < len(h.UserIDS) {
+	if i >= 0 && i < UIndex(len(h.UserIDS)) {
 		h.UserIDS = append(h.UserIDS[:i], h.UserIDS[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserKeys) {
+	if i >= 0 && i < UIndex(len(h.UserKeys)) {
 		h.UserKeys = append(h.UserKeys[:i], h.UserKeys[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserNames) {
+	if i >= 0 && i < UIndex(len(h.UserNames)) {
 		h.UserNames = append(h.UserNames[:i], h.UserNames[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserEmails) {
+	if i >= 0 && i < UIndex(len(h.UserEmails)) {
 		h.UserEmails = append(h.UserEmails[:i], h.UserEmails[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserEmailHashes) {
+	if i >= 0 && i < UIndex(len(h.UserEmailHashes)) {
 		h.UserEmailHashes = append(h.UserEmailHashes[:i], h.UserEmailHashes[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserEmailNotifications) {
+	if i >= 0 && i < UIndex(len(h.UserEmailNotifications)) {
 		h.UserEmailNotifications = append(h.UserEmailNotifications[:i], h.UserEmailNotifications[i+1:]...)
 	}
-	if i >= 0 && i < len(h.UserGravTypes) {
+	if i >= 0 && i < UIndex(len(h.UserGravTypes)) {
 		h.UserGravTypes = append(h.UserGravTypes[:i], h.UserGravTypes[i+1:]...)
 	}
 }
@@ -490,29 +500,38 @@ func (h *Header) CurrentPlayersFrom(players Playerers) (ps Playerers) {
 	return
 }
 
-// ps is an optional parameter.
-// If no player is provided, assume current player.
-func (h *Header) NextPlayerer(ps ...Playerer) Playerer {
+func (h *Header) NextPlayerer(p Playerer) Playerer {
 	log.Debugf("Entering")
 	defer log.Debugf("Exiting")
 
-	cp := h.CurrentPlayerer()
-	i := cp.Index() + 1
-	if len(ps) == 1 {
-		i = ps[0].Index() + 1
+	if p == nil {
+		return nil
 	}
-	return h.PlayererByIndex(i)
+
+	for i, pid := range h.OrderIDS {
+		if pid == p.ID() {
+			return h.PlayererByIndex(i + 1)
+		}
+	}
+
+	return nil
 }
 
-// ps is an optional parameter.
-// If no player is provided, assume current player.
-func (h *Header) PreviousPlayerer(ps ...Playerer) Playerer {
-	cp := h.CurrentPlayerer()
-	i := cp.Index() - 1
-	if len(ps) == 1 {
-		i = ps[0].Index() - 1
+func (h *Header) PreviousPlayerer(p Playerer) Playerer {
+	log.Debugf("Entering")
+	defer log.Debugf("Exiting")
+
+	if p == nil {
+		return nil
 	}
-	return h.PlayererByIndex(i)
+
+	for i, pid := range h.OrderIDS {
+		if pid == p.ID() {
+			return h.PlayererByIndex(i - 1)
+		}
+	}
+
+	return nil
 }
 
 func (h *Header) Winnerers() Playerers {
@@ -530,9 +549,9 @@ func (h *Header) Winnerers() Playerers {
 func (h *Header) SetCurrentPlayerers(players ...Playerer) {
 	switch length := len(players); {
 	case length > 0:
-		h.CPUserIndices = make(UserIndices, length)
+		h.CPUserIndices = make([]UIndex, length)
 		for i, p := range players {
-			h.CPUserIndices[i] = p.ID()
+			h.CPUserIndices[i] = p.UIndex()
 		}
 	default:
 		h.CPUserIndices = nil
@@ -554,7 +573,7 @@ func (h *Header) RemoveCurrentPlayers(ps ...Playerer) {
 	}
 }
 
-func (h *Header) isCP(uIndex int) bool {
+func (h *Header) isCP(uIndex UIndex) bool {
 	if len(h.CPUserIndices) == 0 || h.CPUserIndices[0] == -1 || uIndex == -1 {
 		return false
 	}
@@ -590,16 +609,16 @@ func (h *Header) CurrentUserIsCurrentPlayerOrAdmin(cu *user.User) bool {
 }
 
 func (h *Header) PlayerIsUser(p Playerer, u *user.User) bool {
-	return p != nil && u != nil && h.UserIDFor(p) == u.ID()
+	return p != nil && u != nil && h.UserIDFor(p.ID()) == u.ID()
 }
 
-func (h *Header) IsW(uIndex int) bool {
-	return h.WinnerIDS.Include(uIndex)
+func (h *Header) IsW(uIndex UIndex) bool {
+	return HasUIndex(h.WinnerIDS, uIndex)
 }
 
 func (h *Header) IsWinner(u *user.User) bool {
 	for _, p := range h.PlayerersByUser(u) {
-		if h.WinnerIDS.Include(p.ID()) {
+		if HasUIndex(h.WinnerIDS, p.UIndex()) {
 			return true
 		}
 	}
@@ -618,19 +637,19 @@ func (h *Header) UserLinkFor(uid int64) template.HTML {
 	return user.LinkFor(uid, h.NameByUID(uid))
 }
 
-func (h *Header) PlayerLinkByID(cu *user.User, pid int) template.HTML {
-	i := pid % len(h.UserIDS)
-	uid := h.UserIDS[i]
+func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
+	i := pid.ToIndex()
+	uid := h.UserIDS[pid.ToIndex()]
 
-	cp := h.isCP(pid)
+	cp := h.isCP(i)
 
 	var me bool
 	if cu != nil {
 		me = cu.ID() == uid
 	}
 
-	w := h.IsW(pid)
-	n := h.NameByPID(pid)
+	w := h.IsW(i)
+	n := h.NameFor(pid)
 
 	path := user.PathFor(uid)
 	result := fmt.Sprintf(`<a href=%q >%s</a>`, path, n)
@@ -659,8 +678,8 @@ func (h *Header) PlayerLinks(cu *user.User) template.HTML {
 	}
 
 	links := make([]string, len(h.OrderIDS))
-	for i, index := range h.OrderIDS {
-		links[i] = string(h.PlayerLinkByID(cu, index))
+	for i, pid := range h.OrderIDS {
+		links[i] = string(h.PlayerLinkByPID(cu, pid))
 	}
 	return template.HTML(ToSentence(links))
 }
@@ -672,8 +691,8 @@ func (h *Header) CurrentPlayerLinks(cu *user.User) template.HTML {
 	}
 
 	links := make([]string, len(cps))
-	for j, i := range cps {
-		links[j] = string(h.PlayerLinkByID(cu, i))
+	for j, uIndex := range cps {
+		links[j] = string(h.PlayerLinkByPID(cu, uIndex.ToPID()))
 	}
 	return template.HTML(ToSentence(links))
 }
@@ -693,20 +712,19 @@ func (h *Header) AcceptedPlayers() int {
 	return len(h.UserIDS)
 }
 
-// PlayererByID returns the player having the id.
-func (h *Header) PlayererByID(id int) (p Playerer) {
-	return PlayererByID(h.gamer.(GetPlayerers).GetPlayerers(), id)
+// PlayererByPID returns the player having the PID.
+func (h *Header) PlayererByPID(pid PID) (p Playerer) {
+	return PlayererByPID(h.gamer.(GetPlayerers).GetPlayerers(), pid)
 }
 
-// PlayererByID returns the player from ps having the id.
-func PlayererByID(ps Playerers, id int) (p Playerer) {
+// PlayererByPID returns the player from ps having the PID.
+func PlayererByPID(ps Playerers, pid PID) Playerer {
 	for _, p2 := range ps {
-		if p2.ID() == id {
-			p = p2
-			return
+		if p2.ID() == pid {
+			return p2
 		}
 	}
-	return
+	return nil
 }
 
 func (h *Header) PlayererByColor(c Color) Playerer {
@@ -719,19 +737,21 @@ func (h *Header) PlayererByColor(c Color) Playerer {
 }
 
 // PlayerBySID provides the player having the id represented by the string.
-func (h *Header) PlayerBySID(sid string) (p Playerer) {
-	if id, err := strconv.Atoi(sid); err == nil {
-		p = h.PlayererByID(id)
+func (h *Header) PlayerBySID(sid string) Playerer {
+	i, err := strconv.Atoi(sid)
+	if err == nil {
+		return h.PlayererByPID(PID(i))
 	}
-	return
+	return nil
 }
 
 // PlayerBySID provides the player in ps having the id represented by the string.
-func PlayerBySID(ps Playerers, sid string) (p Playerer) {
-	if id, err := strconv.Atoi(sid); err == nil {
-		p = PlayererByID(ps, id)
+func PlayerBySID(ps Playerers, sid string) Playerer {
+	i, err := strconv.Atoi(sid)
+	if err == nil {
+		return PlayererByPID(ps, PID(i))
 	}
-	return
+	return nil
 }
 
 // PlayererByUserID returns the player associated with the user id
@@ -760,9 +780,9 @@ func (h *Header) PlayerersByUser(user *user.User) Playerers {
 	return ps
 }
 
-func (h *Header) PlayerByUserIndex(index int) Playerer {
+func (h *Header) PlayerByUserIndex(i UIndex) Playerer {
 	for _, p := range h.gamer.(GetPlayerers).GetPlayerers() {
-		if p.ID() == index {
+		if p.UIndex() == i {
 			return p
 		}
 	}
@@ -770,14 +790,13 @@ func (h *Header) PlayerByUserIndex(index int) Playerer {
 }
 
 // PlayerByUserIndex returns the player from players ps having the provided user index.
-func PlayerByUserIndex(ps Playerers, index int) (p Playerer) {
+func PlayerByUserIndex(ps Playerers, index UIndex) Playerer {
 	for _, p2 := range ps {
-		if p2.ID() == index {
-			p = p2
-			return
+		if p2.ID().ToIndex() == index {
+			return p2
 		}
 	}
-	return
+	return nil
 }
 
 // PlayererByIndex returns the player at the index i in the ring of players ps
@@ -789,14 +808,13 @@ func (h *Header) PlayererByIndex(i int) Playerer {
 
 // PlayererByIndex returns the player at the index i in the ring of players ps
 // Wraps-around based on number of players.
-func PlayererByIndex(ps Playerers, i int) (p Playerer) {
+func PlayererByIndex(ps Playerers, i int) Playerer {
 	l := len(ps)
-	if r := i % l; r < 0 {
-		p = ps[l+r]
-	} else {
-		p = ps[r]
+	r := i % l
+	if r < 0 {
+		return ps[l+r]
 	}
-	return
+	return ps[r]
 }
 
 type Phase int
@@ -901,8 +919,8 @@ func (h *Header) notificationFor(c *gin.Context, p Playerer) (mailjet.InfoMessag
 	msg.HTMLPart = buf.String()
 	msg.To = &mailjet.RecipientsV31{
 		mailjet.RecipientV31{
-			Email: h.EmailFor(p),
-			Name:  h.NameFor(p),
+			Email: h.EmailFor(p.ID()),
+			Name:  h.NameFor(p.ID()),
 		},
 	}
 	return msg, nil

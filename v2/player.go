@@ -21,13 +21,25 @@ const (
 	GreaterThan Comparison = 1
 )
 
-const NoPlayerID int = -1
+type UIndex int
+
+func (uIndex UIndex) ToPID() PID {
+	return PID(uIndex + 1)
+}
+
+type PID int
+
+func (pid PID) ToIndex() UIndex {
+	return UIndex(pid - 1)
+}
+
+const NoPlayerID PID = 0
 
 type Player struct {
 	gamer           Gamer
 	user            *user.User
 	rating          *CurrentRating
-	IDF             int  `form:"idf"`
+	IDF             PID  `form:"idf"`
 	PerformedAction bool `form:"performed-action"`
 	Score           int  `form:"score"`
 	Passed          bool `form:"passed"`
@@ -38,7 +50,7 @@ type Players []*Player
 type jPlayer struct {
 	User            *user.User     `json:"user"`
 	Rating          *CurrentRating `json:"rating"`
-	IDF             int            `json:"id"`
+	IDF             PID            `json:"id"`
 	PerformedAction bool           `json:"performedAction"`
 	Score           int            `json:"score"`
 	Passed          bool           `json:"passed"`
@@ -59,8 +71,8 @@ func (p *Player) MarshalJSON() ([]byte, error) {
 }
 
 type Playerer interface {
-	ID() int
-	Index() int
+	ID() PID
+	UIndex() UIndex
 	User() *user.User
 	Name() string
 	Color() Color
@@ -94,11 +106,11 @@ func NewPlayer() (p *Player) {
 	return
 }
 
-func (p *Player) ID() int {
+func (p *Player) ID() PID {
 	return p.IDF
 }
 
-func (p *Player) SetID(id int) {
+func (p *Player) SetID(id PID) {
 	p.IDF = id
 }
 
@@ -120,67 +132,61 @@ func (p *Player) NotEqual(p2 Playerer) bool {
 
 func (p *Player) User() *user.User {
 	if p.user == nil {
-		p.user = p.gamer.User(p.ID())
+		p.user = p.gamer.User(p.UIndex())
 	}
 	return p.user
 }
 
-func (h *Header) UserIDFor(p Playerer) (id int64) {
-	if l, pid := len(h.UserIDS), p.ID(); pid >= 0 && pid < l {
-		id = h.UserIDS[p.ID()]
-	}
-	return
+func (p *Player) UIndex() UIndex {
+	return p.ID().ToIndex()
 }
 
-func (h *Header) NameFor(p Playerer) (n string) {
-	if p != nil {
-		n = h.NameByPID(p.ID())
+func (h *Header) UserIDFor(pid PID) int64 {
+	l, uIndex := UIndex(len(h.UserIDS)), pid.ToIndex()
+	if uIndex >= 0 && uIndex < l {
+		return h.UserIDS[uIndex]
 	}
-	return
+	return 0
 }
 
-func (h *Header) NameByPID(pid int) (n string) {
-	if l := len(h.UserNames); pid >= 0 && pid < l {
-		n = h.UserNames[pid]
-	}
-	return
+func (h *Header) NameFor(pid PID) string {
+	return h.NameByIndex(pid.ToIndex())
 }
 
-func (h *Header) NameByUID(uid int64) (n string) {
-	var index int = NotFound
+func (h *Header) NameByUID(uid int64) string {
+	return h.NameByIndex(h.IndexFor(uid))
+}
+
+func (h *Header) NameByIndex(i UIndex) string {
+	if i >= 0 && i < UIndex(len(h.UserNames)) {
+		return h.UserNames[i]
+	}
+	return ""
+}
+
+func (h *Header) IndexFor(uid int64) UIndex {
 	for i := range h.UserIDS {
 		if uid == h.UserIDS[i] {
-			index = i
-			break
-		}
-	}
-
-	if index != NotFound {
-		n = h.NameByPID(index)
-	}
-	return
-}
-
-func (h *Header) IndexFor(uid int64) int {
-	for i := range h.UserIDS {
-		if uid == h.UserIDS[i] {
-			return i
+			return UIndex(i)
 		}
 	}
 	return NotFound
 }
 
-func (h *Header) EmailFor(p Playerer) (em string) {
-	if l, pid := len(h.UserEmails), p.ID(); pid >= 0 && pid < l {
-		em = h.UserEmails[p.ID()]
+func (h *Header) EmailFor(pid PID) string {
+	l := len(h.UserEmails)
+	i := int(pid.ToIndex())
+	if i >= 0 && i < l {
+		return h.UserEmails[i]
 	}
-	return
+	return ""
 }
 
-func (h *Header) GravTypeFor(p Playerer) string {
-	l, pid := len(h.UserGravTypes), p.ID()
-	if pid >= 0 && pid < l {
-		return h.UserGravTypes[p.ID()]
+func (h *Header) GravTypeFor(pid PID) string {
+	l := len(h.UserGravTypes)
+	i := int(pid.ToIndex())
+	if i >= 0 && i < l {
+		return h.UserGravTypes[i]
 	}
 	return ""
 }
@@ -194,27 +200,28 @@ func (p *Player) Name() (s string) {
 	return
 }
 
-// Index provides the index in players for the player.
-// TODO: Deprecated in favor of IndexFor
-func (p *Player) Index() (index int) {
-	return IndexFor(p, p.Game().(GetPlayerers).GetPlayerers())
-}
+// // Index provides the index in players for the player.
+// // TODO: Deprecated in favor of IndexFor
+// func (p *Player) UIndex() (index UIndex) {
+// 	return UIndexFor(p, p.Game().(GetPlayerers).GetPlayerers())
+// }
 
-// IndexFor returns the index for the player in players, if present.
-// Returns NotFound, the player not in players.
-func IndexFor(p Playerer, ps Playerers) (index int) {
-	index = NotFound
-	for i, p2 := range ps {
-		if p.ID() == p2.ID() {
-			index = i
-			break
-		}
-	}
-	return
-}
+// // IndexFor returns the index for the player in players, if present.
+// // Returns NotFound, the player not in players.
+// func UIndexFor(p Playerer, ps Playerers) (index UIndex) {
+// 	index = NotFound
+// 	for i, p2 := range ps {
+// 		if p.ID() == p2.ID() {
+// 			index = i
+// 			break
+// 		}
+// 	}
+// 	return
+// }
 
 // NotFound indicates a value (e.g., player) was not found in the collection.
 const NotFound = -1
+const UIndexNotFound UIndex = -1
 
 func (p *Player) Color() Color {
 	if p == nil {
@@ -289,11 +296,15 @@ func (p *Player) Gravatar() string {
 		p.User().ID, p.User().Gravatar("80"), p.Color())
 }
 
-func (h *Header) GravatarFor(p Playerer) template.HTML {
+func (h *Header) GravatarFor(pid PID) template.HTML {
 	return template.HTML(fmt.Sprintf(`<a href=%q ><img src=%q alt="Gravatar" class="%s-border" /> </a>`,
-		h.UserPathFor(p), user.GravatarURL(h.EmailFor(p), "80", h.GravTypeFor(p)), p.Color()))
+		h.UserPathFor(pid), user.GravatarURL(h.EmailFor(pid), "80", h.GravTypeFor(pid)), h.ColorFor(pid)))
 }
 
-func (h *Header) UserPathFor(p Playerer) template.HTML {
-	return user.PathFor(h.UserIDFor(p))
+func (h *Header) UserPathFor(pid PID) template.HTML {
+	return user.PathFor(h.UserIDFor(pid))
+}
+
+func (h *Header) ColorFor(pid PID) Color {
+	return h.DefaultColorMap()[pid]
 }
