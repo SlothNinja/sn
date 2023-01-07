@@ -155,7 +155,7 @@ func NewCurrent(pk *datastore.Key, t Type, params ...float64) *CurrentRating {
 	}
 
 	rating := new(CurrentRating)
-	rating.Key = datastore.NameKey(crKind, t.SString(), pk)
+	rating.Key = datastore.NameKey(crKind, string(t), pk)
 	rating.R = r
 	rating.RD = rd
 	rating.Low = r - (2.0 * rd)
@@ -222,10 +222,10 @@ func (client *RatingClient) GetMulti(c *gin.Context, uKeys []*datastore.Key, t T
 }
 
 func (client *RatingClient) GetAll(c *gin.Context, uKey *datastore.Key) (CurrentRatings, error) {
-	l := len(Types)
+	l := len(types())
 	rs := make(CurrentRatings, l)
 	ks := make([]*datastore.Key, l)
-	for i, t := range Types {
+	for i, t := range types() {
 		rs[i] = NewCurrent(uKey, t)
 		ks[i] = rs[i].Key
 	}
@@ -259,7 +259,7 @@ func (client *RatingClient) GetAll(c *gin.Context, uKey *datastore.Key) (Current
 func (client *RatingClient) GetFor(c *gin.Context, t Type) (CurrentRatings, error) {
 	q := datastore.NewQuery(crKind).
 		Ancestor(user.RootKey()).
-		Filter("Type=", int(t)).
+		Filter("Type=", string(t)).
 		Order("-Low")
 
 	var rs CurrentRatings
@@ -315,11 +315,11 @@ func (client *RatingClient) RatingsIndex(c *gin.Context) {
 	if err != nil {
 		client.Log.Debugf(err.Error())
 	}
-	t := ToType[c.Param("type")]
+	t := ToType(c.Param("type"))
 	c.HTML(http.StatusOK, "rating/index", gin.H{
 		"Type":      t,
 		"Heading":   "Ratings: " + t.String(),
-		"Types":     Types,
+		"Types":     types(),
 		"Context":   c,
 		"VersionID": VersionID(),
 		"CUser":     cu,
@@ -338,7 +338,7 @@ func (client *RatingClient) getCurrentRatingsFiltered(c *gin.Context, t Type, le
 	}
 
 	if t != NoType {
-		q = q.Filter("Type=", int(t))
+		q = q.Filter("Type=", string(t))
 	}
 
 	var cnt int64
@@ -465,7 +465,7 @@ func (client *RatingClient) Update(c *gin.Context) {
 	client.Log.Debugf(msgEnter)
 	defer client.Log.Debugf(msgExit)
 
-	t := ToType[c.Param("type")]
+	t := ToType(c.Param("type"))
 	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
 	locationID := client.getLocationID()
 	queueID := "default"
@@ -507,7 +507,7 @@ func (client *RatingClient) updateUser(c *gin.Context) {
 		return
 	}
 
-	t := ToType[c.Param("type")]
+	t := ToType(c.Param("type"))
 
 	u, err := client.User.Get(c, uid)
 	if err != nil {
@@ -693,7 +693,7 @@ func (client *RatingClient) JSONFilteredAction(c *gin.Context) {
 	client.Log.Debugf(msgEnter)
 	defer client.Log.Debugf(msgExit)
 
-	t := Get(c)
+	t := ToType(c.Param("type"))
 
 	var offset, limit int32 = 0, -1
 	if o, err := strconv.ParseInt(c.PostForm("start"), 10, 64); err == nil && o >= 0 {
@@ -864,7 +864,7 @@ func createTask(projectID, locationID, queueID string, uid int64, t Type) (*task
 			MessageType: &taskspb.Task_AppEngineHttpRequest{
 				AppEngineHttpRequest: &taskspb.AppEngineHttpRequest{
 					HttpMethod:  taskspb.HttpMethod_POST,
-					RelativeUri: fmt.Sprintf("/ratings/userUpdate/%d/%s", uid, t.IDString()),
+					RelativeUri: fmt.Sprintf("/ratings/userUpdate/%d/%s", uid, t),
 				},
 			},
 		},

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -107,7 +106,7 @@ type headerer interface {
 	User(UIndex) *user.User
 	CurrentPlayerers() []Playerer
 	NextPlayerer(...Playerer) Playerer
-	DefaultColorMap() Colors
+	DefaultColorMap() []Color
 	UserLinks() template.HTML
 	Private() bool
 	CanAdd(*user.User) bool
@@ -181,18 +180,18 @@ func NewHeader(c *gin.Context, g Gamer, id int64) *Header {
 
 type Strings []string
 
-type ColorMaps map[Type]Colors
+type ColorMaps map[Type][]Color
 
 var defaultColorMaps = ColorMaps{
-	Confucius:  Colors{Yellow, Purple, Green, White, Black},
-	Tammany:    Colors{Red, Yellow, Purple, Black, Brown},
-	ATF:        Colors{Red, Green, Purple},
-	GOT:        Colors{Yellow, Purple, Green, Black},
-	Indonesia:  Colors{White, Black, Green, Purple, Orange},
-	Gettysburg: Colors{White, Black},
+	Confucius:  []Color{Yellow, Purple, Green, White, Black},
+	Tammany:    []Color{Red, Yellow, Purple, Black, Brown},
+	ATF:        []Color{Red, Green, Purple},
+	GOT:        []Color{Yellow, Purple, Green, Black},
+	Indonesia:  []Color{White, Black, Green, Purple, Orange},
+	Gettysburg: []Color{White, Black},
 }
 
-func (h *Header) DefaultColorMap() Colors {
+func (h *Header) DefaultColorMap() []Color {
 	return defaultColorMaps[h.Type]
 }
 
@@ -267,20 +266,6 @@ func (h *Header) FromForm(c *gin.Context, cu *user.User, t Type) error {
 	return nil
 }
 
-func getType(form url.Values) Type {
-	sType := form.Get("game-type")
-	iType, err := strconv.Atoi(sType)
-	if err != nil {
-		return NoType
-	}
-
-	t := Type(iType)
-	if _, ok := TypeStrings[t]; !ok {
-		return NoType
-	}
-	return t
-}
-
 func (h *Header) User(index UIndex) *user.User {
 	i := int(index)
 	l := len(h.UserIDS)
@@ -339,7 +324,7 @@ func (h *Header) CanDropout(u *user.User) bool {
 }
 
 func (h *Header) Stub() string {
-	return strings.ToLower(h.Type.SString())
+	return string(h.Type)
 }
 
 func (h *Header) Private() bool {
@@ -828,14 +813,14 @@ type PhaseNameMaps map[Type]PhaseNameMap
 
 func registerPhaseNames(t Type, names PhaseNameMap) {
 	if phaseNameMaps == nil {
-		phaseNameMaps = make(PhaseNameMaps, len(Types))
+		phaseNameMaps = make(PhaseNameMaps, len(types()))
 	}
 	phaseNameMaps[t] = names
 }
 
 func registerSubPhaseNames(t Type, names SubPhaseNameMap) {
 	if subPhaseNameMaps == nil {
-		subPhaseNameMaps = make(SubPhaseNameMaps, len(Types))
+		subPhaseNameMaps = make(SubPhaseNameMaps, len(types()))
 	}
 	subPhaseNameMaps[t] = names
 }
@@ -848,7 +833,7 @@ type Factory func(*gin.Context) Gamer
 
 func Register(t Type, f Factory, p PhaseNameMap, sp SubPhaseNameMap) {
 	if factories == nil {
-		factories = make(factoryMap, len(Types))
+		factories = make(factoryMap, len(types()))
 	}
 	factories[t] = f
 	registerPhaseNames(t, p)

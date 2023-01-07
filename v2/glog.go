@@ -30,8 +30,8 @@ func NewEntry(g Gamer) *Entry {
 	h := g.GetHeader()
 	return &Entry{
 		gamer:         g,
-		PlayerID:      NoPlayerID,
-		OtherPlayerID: NoPlayerID,
+		PlayerID:      NoPID,
+		OtherPlayerID: NoPID,
 		TurnF:         h.Turn,
 		PhaseF:        h.Phase,
 		SubPhaseF:     h.SubPhase,
@@ -45,7 +45,7 @@ func NewEntryFor(p Playerer, g Gamer) *Entry {
 	return &Entry{
 		gamer:         g,
 		PlayerID:      p.ID(),
-		OtherPlayerID: NoPlayerID,
+		OtherPlayerID: NoPID,
 		TurnF:         h.Turn,
 		PhaseF:        h.Phase,
 		SubPhaseF:     h.SubPhase,
@@ -81,7 +81,7 @@ func (e *Entry) OtherPlayer() Playerer {
 func (e *Entry) SetOtherPlayer(ps ...Playerer) {
 	switch l := len(ps); {
 	case l == 1 && ps[0] == nil:
-		e.OtherPlayerID = NoPlayerID
+		e.OtherPlayerID = NoPID
 	case l == 1:
 		e.OtherPlayerID = ps[0].ID()
 	}

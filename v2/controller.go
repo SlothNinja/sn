@@ -46,37 +46,37 @@ func VersionID() string {
 	return os.Getenv(GAE_VERSION)
 }
 
-func (client *Client) Index(prefix string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		client.Log.Debugf("Entering")
-		defer client.Log.Debugf("Exiting")
-
-		gs := GamersFrom(c)
-		cu, err := client.User.Current(c)
-		if err != nil {
-			client.Log.Debugf(err.Error())
-		}
-
-		status := StatusFrom(c)
-		switch status {
-		case Recruiting:
-			c.HTML(http.StatusOK, "shared/invitation_index", gin.H{
-				"Context":   c,
-				"VersionID": VersionID(),
-				"CUser":     cu,
-				"Games":     gs,
-			})
-		default:
-			c.HTML(http.StatusOK, "shared/multi_games_index", gin.H{
-				"Context":   c,
-				"VersionID": VersionID(),
-				"CUser":     cu,
-				"Games":     gs,
-				"Status":    status,
-			})
-		}
-	}
-}
+// func (client *Client) Index(prefix string) gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		client.Log.Debugf("Entering")
+// 		defer client.Log.Debugf("Exiting")
+//
+// 		gs := GamersFrom(c)
+// 		cu, err := client.User.Current(c)
+// 		if err != nil {
+// 			client.Log.Debugf(err.Error())
+// 		}
+//
+// 		status := StatusFrom(c)
+// 		switch status {
+// 		case Recruiting:
+// 			c.HTML(http.StatusOK, "shared/invitation_index", gin.H{
+// 				"Context":   c,
+// 				"VersionID": VersionID(),
+// 				"CUser":     cu,
+// 				"Games":     gs,
+// 			})
+// 		default:
+// 			c.HTML(http.StatusOK, "shared/multi_games_index", gin.H{
+// 				"Context":   c,
+// 				"VersionID": VersionID(),
+// 				"CUser":     cu,
+// 				"Games":     gs,
+// 				"Status":    status,
+// 			})
+// 		}
+// 	}
+// }
 
 func (client *Client) JIndex(c *gin.Context) {
 	client.Log.Debugf("Entering")
@@ -107,10 +107,10 @@ func (client *Client) JIndex(c *gin.Context) {
 		return
 	}
 
-	status := ToStatus[c.Param("status")]
+	status := ToStatus(c.Param("status"))
 	q := datastore.
 		NewQuery("Game").
-		Filter("Status=", int(status)).
+		Filter("Status=", status).
 		Order("-UpdatedAt")
 
 	cnt, err := client.DS.Count(c, q)
@@ -256,25 +256,25 @@ type jHeader struct {
 	Status      Status        `json:"status"`
 }
 
-func (client Client) JSONIndexAction(c *gin.Context) {
-	client.Log.Debugf("Entering")
-	defer client.Log.Debugf("Exiting")
+// func (client Client) JSONIndexAction(c *gin.Context) {
+// 	client.Log.Debugf("Entering")
+// 	defer client.Log.Debugf("Exiting")
+//
+// 	cu, err := client.User.Current(c)
+// 	if err != nil {
+// 		client.Log.Warningf(err.Error())
+// 	}
+//
+// 	data, err := toGameTable(c, cu)
+// 	if err != nil {
+// 		client.Log.Errorf(err.Error())
+// 		c.JSON(http.StatusOK, fmt.Sprintf("%v", err))
+// 		return
+// 	}
+// 	c.JSON(http.StatusOK, data)
+// }
 
-	cu, err := client.User.Current(c)
-	if err != nil {
-		client.Log.Warningf(err.Error())
-	}
-
-	data, err := toGameTable(c, cu)
-	if err != nil {
-		client.Log.Errorf(err.Error())
-		c.JSON(http.StatusOK, fmt.Sprintf("%v", err))
-		return
-	}
-	c.JSON(http.StatusOK, data)
-}
-
-func toGameTable(c *gin.Context, cu *user.User) (*jGamesIndex, error) {
+func toGameTable(c *gin.Context, cu *user.User, cnt int64) (*jGamesIndex, error) {
 	log.Debugf("Entering")
 	defer log.Debugf("Exiting")
 
@@ -307,13 +307,46 @@ func toGameTable(c *gin.Context, cu *user.User) (*jGamesIndex, error) {
 	} else {
 		table.Draw = draw
 	}
-	table.RecordsTotal = countFrom(c)
-	table.RecordsFiltered = countFrom(c)
+	table.RecordsTotal = cnt
+	table.RecordsFiltered = cnt
 	return table, nil
 }
 
 func ToGameTable(c *gin.Context, gs []Gamer, cnt int64, cu *user.User) (*jGamesIndex, error) {
-	return toGameTable(withCount(withGamers(c, gs), cnt), cu)
+	log.Debugf("Entering")
+	defer log.Debugf("Exiting")
+
+	table := new(jGamesIndex)
+	l := len(gs)
+	table.Data = make([]*jHeader, l)
+	for i, g := range gs {
+		h := g.GetHeader()
+		table.Data[i] = &jHeader{
+			ID:          g.GetHeader().ID(),
+			Type:        template.HTML(h.Type.String()),
+			Title:       titleLink(g),
+			Creator:     user.LinkFor(h.CreatorID, h.CreatorName),
+			Players:     h.PlayerLinks(cu),
+			NumPlayers:  template.HTML(fmt.Sprintf("%d / %d", h.AcceptedPlayers(), h.NumPlayers)),
+			Round:       h.Round,
+			OptString:   template.HTML(h.OptString),
+			Progress:    template.HTML(h.Progress),
+			UpdatedAt:   h.UpdatedAt,
+			LastUpdated: template.HTML(LastUpdated(time.Time(h.UpdatedAt))),
+			Public:      publicPrivate(g),
+			Actions:     actionButtons(c, cu, g),
+			Status:      h.Status,
+		}
+	}
+
+	if draw, err := strconv.Atoi(c.PostForm("draw")); err != nil {
+		return nil, err
+	} else {
+		table.Draw = draw
+	}
+	table.RecordsTotal = cnt
+	table.RecordsFiltered = cnt
+	return table, nil
 }
 
 func publicPrivate(g Gamer) template.HTML {
@@ -329,7 +362,7 @@ func titleLink(g Gamer) template.HTML {
 	h := g.GetHeader()
 	return template.HTML(fmt.Sprintf(`
 		<div><a href="/%s/game/show/%d">%s</a></div>
-		<div style="font-size:.7em">%s</div>`, h.Type.IDString(), h.ID(), h.Title, h.OptString))
+		<div style="font-size:.7em">%s</div>`, h.Type, h.ID(), h.Title, h.OptString))
 }
 
 func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
@@ -339,14 +372,14 @@ func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
 	h := g.GetHeader()
 	switch h.Status {
 	case Running:
-		t := h.Type.IDString()
+		t := h.Type
 		if g.GetHeader().IsCurrentPlayer(cu) {
 			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Play</a>`, t, h.ID()))
 		} else {
 			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Show</a>`, t, h.ID()))
 		}
 	case Recruiting:
-		t := h.Type.IDString()
+		t := h.Type
 		switch {
 		case g.CanAdd(cu):
 			if g.Private() {
@@ -407,11 +440,11 @@ func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, 
 
 	q := datastore.
 		NewQuery(opt.Kind).
-		Filter("Status=", int(opt.Status)).
+		Filter("Status=", opt.Status).
 		Order("-UpdatedAt")
 
 	if opt.Type != All && opt.Type != NoType {
-		q = q.Filter("Type=", int(opt.Type))
+		q = q.Filter("Type=", string(opt.Type))
 	}
 
 	if opt.UserID != 0 {

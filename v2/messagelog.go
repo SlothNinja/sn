@@ -38,14 +38,6 @@ func NewMessage(u *user.User, text string) *Message {
 	}
 }
 
-func (m *Message) Color(cm ColorMap) template.HTML {
-	c, ok := cm[int(m.CreatorID)]
-	if !ok {
-		return template.HTML("default")
-	}
-	return template.HTML(c.String())
-}
-
 func (m *Message) Message() template.HTML {
 	return template.HTML(template.HTMLEscapeString(m.Text))
 }

@@ -2,12 +2,9 @@ package sn
 
 import (
 	"fmt"
-	"net/http"
 	"strconv"
-	"strings"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,17 +18,15 @@ func getAllQuery(c *gin.Context) *datastore.Query {
 	return datastore.NewQuery("Game").Ancestor(GamesRoot(c))
 }
 
-func (client *Client) getFiltered(c *gin.Context, status, sid, start, length string, t Type) (Gamers, int64, error) {
+func (client *Client) getFiltered(c *gin.Context, status Status, sid, start, length string, t Type) (Gamers, int64, error) {
 	client.Log.Debugf("Entering")
 	defer client.Log.Debugf("Exiting")
 
 	q := getAllQuery(c).
 		KeysOnly()
 
-	if status != "" {
-		st := ToStatus[strings.ToLower(status)]
-		q = q.Filter("Status=", int(st))
-		WithStatus(c, st)
+	if status != NoStatus {
+		q = q.Filter("Status=", status)
 	}
 
 	if sid != "" {
@@ -41,7 +36,7 @@ func (client *Client) getFiltered(c *gin.Context, status, sid, start, length str
 	}
 
 	if t != All {
-		q = q.Filter("Type=", int(t)).
+		q = q.Filter("Type=", string(t)).
 			Order("-UpdatedAt")
 	} else {
 		q = q.Order("-UpdatedAt")
@@ -73,14 +68,15 @@ func (client *Client) getFiltered(c *gin.Context, status, sid, start, length str
 	gs := make([]Gamer, l)
 	hs := make([]*Header, l)
 	for i := range gs {
-		var ok bool
 		if t == All {
-			k := strings.ToLower(ks[i].Parent.Kind)
-			if t, ok = ToType[k]; !ok {
-				return nil, 0, fmt.Errorf("Unknown Game Type For: %s", k)
+			t2 := ToType(ks[i].Parent.Kind)
+			if t2 == NoType {
+				return nil, 0, fmt.Errorf("Missing Type")
 			}
+			gs[i] = factories[t2](c)
+		} else {
+			gs[i] = factories[t](c)
 		}
-		gs[i] = factories[t](c)
 		hs[i] = gs[i].GetHeader()
 	}
 
@@ -101,64 +97,33 @@ func (client *Client) getFiltered(c *gin.Context, status, sid, start, length str
 	return gs, int64(cnt), nil
 }
 
-func WithStatus(c *gin.Context, s Status) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	c.Set(statusKey, s)
-}
-
-func StatusFrom(c *gin.Context) (s Status) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	if s = ToStatus[strings.ToLower(c.Param("status"))]; s != NoStatus {
-		WithStatus(c, s)
-	} else {
-		s, _ = c.Value(statusKey).(Status)
-	}
-	return
-}
-
-func withCount(c *gin.Context, cnt int64) *gin.Context {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	c.Set(countKey, cnt)
-	return c
-}
-
-func countFrom(c *gin.Context) (cnt int64) {
-	cnt, _ = c.Value(countKey).(int64)
-	return
-}
-
-func (client Client) GetFiltered(t Type) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		client.Log.Debugf("Entering")
-		defer client.Log.Debugf("Exiting")
-
-		gs, cnt, err := client.getFiltered(c, c.Param("status"), c.Param("uid"), c.PostForm("start"), c.PostForm("length"), t)
-
-		if err != nil {
-			client.Log.Errorf(err.Error())
-			c.Redirect(http.StatusSeeOther, homePath)
-			c.Abort()
-		}
-		withGamers(withCount(c, cnt), gs)
-	}
-}
-
-func (client Client) GetRunning(c *gin.Context) {
-	client.Log.Debugf("Entering")
-	defer client.Log.Debugf("Exiting")
-
-	gs, cnt, err := client.getFiltered(c, c.Param("status"), "", "", "", All)
-
-	if err != nil {
-		client.Log.Errorf(err.Error())
-		c.Redirect(http.StatusSeeOther, homePath)
-		c.Abort()
-	}
-	withGamers(withCount(c, cnt), gs)
-}
+// func (client Client) GetFiltered(t Type) gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		client.Log.Debugf("Entering")
+// 		defer client.Log.Debugf("Exiting")
+//
+// 		status := ToStatus(c.Param("status"))
+// 		gs, cnt, err := client.getFiltered(c, status, c.Param("uid"), c.PostForm("start"), c.PostForm("length"), t)
+//
+// 		if err != nil {
+// 			client.Log.Errorf(err.Error())
+// 			c.Redirect(http.StatusSeeOther, homePath)
+// 			c.Abort()
+// 		}
+// 		withGamers(withCount(c, cnt), gs)
+// 	}
+// }
+//
+// func (client Client) GetRunning(c *gin.Context) {
+// 	client.Log.Debugf("Entering")
+// 	defer client.Log.Debugf("Exiting")
+//
+// 	gs, cnt, err := client.getFiltered(c, c.Param("status"), "", "", "", All)
+//
+// 	if err != nil {
+// 		client.Log.Errorf(err.Error())
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 		c.Abort()
+// 	}
+// 	withGamers(withCount(c, cnt), gs)
+// }

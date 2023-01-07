@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"html/template"
 
+	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/user"
+	"github.com/elliotchance/pie/v2"
 )
 
 func init() {
@@ -33,7 +35,7 @@ func (pid PID) ToIndex() UIndex {
 	return UIndex(pid - 1)
 }
 
-const NoPlayerID PID = 0
+const NoPID PID = 0
 
 type Player struct {
 	gamer           Gamer
@@ -43,7 +45,7 @@ type Player struct {
 	PerformedAction bool `form:"performed-action"`
 	Score           int  `form:"score"`
 	Passed          bool `form:"passed"`
-	ColorMapF       Colors
+	ColorMapF       []Color
 }
 type Players []*Player
 
@@ -54,7 +56,7 @@ type jPlayer struct {
 	PerformedAction bool           `json:"performedAction"`
 	Score           int            `json:"score"`
 	Passed          bool           `json:"passed"`
-	ColorMap        []string       `json:"colorMap"`
+	ColorMap        []Color        `json:"colorMap"`
 }
 
 func (p *Player) MarshalJSON() ([]byte, error) {
@@ -65,7 +67,7 @@ func (p *Player) MarshalJSON() ([]byte, error) {
 		PerformedAction: p.PerformedAction,
 		Score:           p.Score,
 		Passed:          p.Passed,
-		ColorMap:        p.ColorMap().Strings(),
+		ColorMap:        p.ColorMap(),
 	}
 	return json.Marshal(j)
 }
@@ -76,7 +78,7 @@ type Playerer interface {
 	User() *user.User
 	Name() string
 	Color() Color
-	ColorMap() Colors
+	ColorMap() []Color
 }
 
 func (p *Player) CompareByScore(p2 *Player) (c Comparison) {
@@ -114,11 +116,11 @@ func (p *Player) SetID(id PID) {
 	p.IDF = id
 }
 
-func (p *Player) ColorMap() Colors {
+func (p *Player) ColorMap() []Color {
 	return p.ColorMapF
 }
 
-func (p *Player) SetColorMap(colors Colors) {
+func (p *Player) SetColorMap(colors []Color) {
 	p.ColorMapF = colors
 }
 
@@ -150,7 +152,7 @@ func (h *Header) UserIDFor(pid PID) int64 {
 }
 
 func (h *Header) NameFor(pid PID) string {
-	return h.NameByIndex(pid.ToIndex())
+	return h.UserNames[pid.ToIndex()]
 }
 
 func (h *Header) NameByUID(uid int64) string {
@@ -165,30 +167,23 @@ func (h *Header) NameByIndex(i UIndex) string {
 }
 
 func (h *Header) IndexFor(uid int64) UIndex {
-	for i := range h.UserIDS {
-		if uid == h.UserIDS[i] {
-			return UIndex(i)
-		}
-	}
-	return NotFound
+	return UIndex(pie.FindFirstUsing(h.UserIDS, func(id int64) bool { return id == uid }))
 }
 
 func (h *Header) EmailFor(pid PID) string {
-	l := len(h.UserEmails)
-	i := int(pid.ToIndex())
-	if i >= 0 && i < l {
-		return h.UserEmails[i]
-	}
-	return ""
+	return h.UserEmails[pid.ToIndex()]
+}
+
+func (h *Header) EmailNotificationsFor(pid PID) bool {
+	return h.UserEmailNotifications[pid.ToIndex()]
+}
+
+func (h *Header) UKeyFor(pid PID) *datastore.Key {
+	return h.UserKeys[pid.ToIndex()]
 }
 
 func (h *Header) GravTypeFor(pid PID) string {
-	l := len(h.UserGravTypes)
-	i := int(pid.ToIndex())
-	if i >= 0 && i < l {
-		return h.UserGravTypes[i]
-	}
-	return ""
+	return h.UserGravTypes[pid.ToIndex()]
 }
 
 // Name provides the name of the player.
@@ -225,19 +220,14 @@ const UIndexNotFound UIndex = -1
 
 func (p *Player) Color() Color {
 	if p == nil {
-		return None
+		return NoColor
 	}
 	colorMap := p.gamer.DefaultColorMap()
-	// if cu != nil {
-	// 	if player := p.gamer.PlayererByUserID(cu.ID()); player != nil {
-	// 		colorMap = player.ColorMap()
-	// 	}
-	// }
 	return colorMap[p.ID()]
 }
 
-func (ps Playerers) Colors() Colors {
-	cs := make(Colors, len(ps))
+func (ps Playerers) Colors() []Color {
+	cs := make([]Color, len(ps))
 	for i, p := range ps {
 		cs[i] = p.Color()
 	}

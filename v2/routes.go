@@ -23,11 +23,11 @@ func NewClient(snClient *client.Client, userClient *user.Client, prefix string, 
 func (cl *Client) addRoutes(prefix string) *Client {
 	g1 := cl.Router.Group(prefix)
 
-	// Index
-	g1.GET("/:status",
-		// gtype.SetTypes(),
-		cl.Index(prefix),
-	)
+	// // Index
+	// g1.GET("/:status",
+	// 	// gtype.SetTypes(),
+	// 	cl.Index(prefix),
+	// )
 
 	// JSON Data for Index
 	// g1.POST("", cl.GamesIndex)
@@ -37,22 +37,22 @@ func (cl *Client) addRoutes(prefix string) *Client {
 		cl.JIndex,
 	)
 
-	// Index
-	g1.GET("/:status/user/:uid",
-		// gtype.SetTypes(),
-		cl.Index(prefix),
-	)
+	// // Index
+	// g1.GET("/:status/user/:uid",
+	// 	// gtype.SetTypes(),
+	// 	cl.Index(prefix),
+	// )
 
-	// JSON Data for Index
-	g1.POST("/:status/user/:uid/json",
-		// gtype.SetTypes(),
-		cl.GetFiltered(All),
-		cl.JSONIndexAction,
-	)
+	// // JSON Data for Index
+	// g1.POST("/:status/user/:uid/json",
+	// 	// gtype.SetTypes(),
+	// 	cl.GetFiltered(All),
+	// 	cl.JSONIndexAction,
+	// )
 
-	g1.GET("/:status/notifications",
-		cl.GetRunning,
-		cl.DailyNotifications,
-	)
+	// g1.GET("/:status/notifications",
+	// 	cl.GetRunning,
+	// 	cl.DailyNotifications,
+	// )
 	return cl
 }

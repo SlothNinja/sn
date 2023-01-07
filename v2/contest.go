@@ -110,7 +110,7 @@ func (client *ContestClient) UnappliedFor(c *gin.Context, ukey *datastore.Key, t
 	q := datastore.NewQuery(contestKind).
 		Ancestor(ukey).
 		Filter("Applied=", false).
-		Filter("Type=", int(t)).
+		Filter("Type=", string(t)).
 		KeysOnly()
 
 	ks, err := client.DS.GetAll(c, q, nil)
@@ -149,7 +149,7 @@ func (client *ContestClient) Unapplied(c *gin.Context, ukey *datastore.Key) (Con
 		return nil, err
 	}
 
-	cm := make(ContestMap, len(Types))
+	cm := make(ContestMap, len(types()))
 	for _, c := range cs {
 		c.Applied = true
 		cm[c.Type] = append(cm[c.Type], c)
