@@ -3,16 +3,11 @@ package sn
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"html/template"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/iterator"
 )
@@ -78,81 +73,81 @@ func VersionID() string {
 // 	}
 // }
 
-func (client *Client) JIndex(c *gin.Context) {
-	client.Log.Debugf("Entering")
-	defer client.Log.Debugf("Exiting")
-
-	options := struct {
-		ItemsPerPage int    `json:"itemsPerPage"`
-		Forward      string `json:"forward"`
-	}{}
-
-	err := c.ShouldBind(&options)
-	if err != nil {
-		JErr(c, err)
-		return
-	}
-
-	client.Log.Debugf("options: %#v", options)
-
-	cu, err := client.User.Current(c)
-	if err != nil {
-		JErr(c, err)
-		return
-	}
-
-	forward, err := datastore.DecodeCursor(options.Forward)
-	if err != nil {
-		JErr(c, err)
-		return
-	}
-
-	status := ToStatus(c.Param("status"))
-	q := datastore.
-		NewQuery("Game").
-		Filter("Status=", status).
-		Order("-UpdatedAt")
-
-	cnt, err := client.DS.Count(c, q)
-	if err != nil {
-		JErr(c, err)
-		return
-	}
-
-	client.Log.Debugf("cnt: %v", cnt)
-	items := options.ItemsPerPage
-	if options.ItemsPerPage == -1 {
-		items = cnt
-	}
-
-	var es []*withID
-	it := client.DS.Run(c, q.Start(forward))
-	for i := 0; i < items; i++ {
-		var gh Header
-		_, err := it.Next(&gh)
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			JErr(c, err)
-			return
-		}
-		es = append(es, &withID{&gh})
-	}
-
-	forward, err = it.Cursor()
-	if err != nil {
-		JErr(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"gheaders":   es,
-		"totalItems": cnt,
-		"forward":    forward.String(),
-		"cu":         cu,
-	})
-}
+// func (client *Client) JIndex(c *gin.Context) {
+// 	client.Log.Debugf("Entering")
+// 	defer client.Log.Debugf("Exiting")
+//
+// 	options := struct {
+// 		ItemsPerPage int    `json:"itemsPerPage"`
+// 		Forward      string `json:"forward"`
+// 	}{}
+//
+// 	err := c.ShouldBind(&options)
+// 	if err != nil {
+// 		JErr(c, err)
+// 		return
+// 	}
+//
+// 	client.Log.Debugf("options: %#v", options)
+//
+// 	cu, err := client.User.Current(c)
+// 	if err != nil {
+// 		JErr(c, err)
+// 		return
+// 	}
+//
+// 	forward, err := datastore.DecodeCursor(options.Forward)
+// 	if err != nil {
+// 		JErr(c, err)
+// 		return
+// 	}
+//
+// 	status := ToStatus(c.Param("status"))
+// 	q := datastore.
+// 		NewQuery("Game").
+// 		Filter("Status=", status).
+// 		Order("-UpdatedAt")
+//
+// 	cnt, err := client.DS.Count(c, q)
+// 	if err != nil {
+// 		JErr(c, err)
+// 		return
+// 	}
+//
+// 	client.Log.Debugf("cnt: %v", cnt)
+// 	items := options.ItemsPerPage
+// 	if options.ItemsPerPage == -1 {
+// 		items = cnt
+// 	}
+//
+// 	var es []*withID
+// 	it := client.DS.Run(c, q.Start(forward))
+// 	for i := 0; i < items; i++ {
+// 		var gh Header
+// 		_, err := it.Next(&gh)
+// 		if err == iterator.Done {
+// 			break
+// 		}
+// 		if err != nil {
+// 			JErr(c, err)
+// 			return
+// 		}
+// 		es = append(es, &withID{&gh})
+// 	}
+//
+// 	forward, err = it.Cursor()
+// 	if err != nil {
+// 		JErr(c, err)
+// 		return
+// 	}
+//
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"gheaders":   es,
+// 		"totalItems": cnt,
+// 		"forward":    forward.String(),
+// 		"cu":         cu,
+// 	})
+// }
 
 type ActionType int
 
@@ -181,80 +176,80 @@ type Action struct {
 	Type ActionType
 }
 
-func showPath(c *gin.Context, prefix, id string) string {
-	return fmt.Sprintf("/%s/game/%s/show", prefix, id)
-}
+// func showPath(c *gin.Context, prefix, id string) string {
+// 	return fmt.Sprintf("/%s/game/%s/show", prefix, id)
+// }
+//
+// func GamerFrom(c *gin.Context) (g Gamer) {
+// 	g, _ = c.Value(gamerKey).(Gamer)
+// 	return
+// }
+//
+// func WithGamer(c *gin.Context, g Gamer) *gin.Context {
+// 	c.Set(gamerKey, g)
+// 	return c
+// }
 
-func GamerFrom(c *gin.Context) (g Gamer) {
-	g, _ = c.Value(gamerKey).(Gamer)
-	return
-}
+// func GamersFrom(c *gin.Context) (gs Gamers) {
+// 	gs, _ = c.Value(gamersKey).(Gamers)
+// 	return
+// }
+//
+// func withGamers(c *gin.Context, gs Gamers) *gin.Context {
+// 	c.Set(gamersKey, gs)
+// 	return c
+// }
 
-func WithGamer(c *gin.Context, g Gamer) *gin.Context {
-	c.Set(gamerKey, g)
-	return c
-}
+// type dbState interface {
+// 	DBState()
+// }
+//
+// func AdminFrom(c *gin.Context) (b bool) {
+// 	b, _ = c.Value(adminKey).(bool)
+// 	return
+// }
+//
+// func WithAdmin(c *gin.Context, b bool) {
+// 	c.Set(adminKey, b)
+// }
 
-func GamersFrom(c *gin.Context) (gs Gamers) {
-	gs, _ = c.Value(gamersKey).(Gamers)
-	return
-}
+// func SetAdmin(b bool) gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		WithAdmin(c, b)
+// 	}
+// }
+//
+// func (h *Header) undoKey(cu *user.User) string {
+// 	return fmt.Sprintf("%s/uid-%d", h.Key, cu.ID())
+// }
+//
+// func (h *Header) UndoKey(cu *user.User) string {
+// 	return h.undoKey(cu)
+// }
 
-func withGamers(c *gin.Context, gs Gamers) *gin.Context {
-	c.Set(gamersKey, gs)
-	return c
-}
-
-type dbState interface {
-	DBState()
-}
-
-func AdminFrom(c *gin.Context) (b bool) {
-	b, _ = c.Value(adminKey).(bool)
-	return
-}
-
-func WithAdmin(c *gin.Context, b bool) {
-	c.Set(adminKey, b)
-}
-
-func SetAdmin(b bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		WithAdmin(c, b)
-	}
-}
-
-func (h *Header) undoKey(cu *user.User) string {
-	return fmt.Sprintf("%s/uid-%d", h.Key, cu.ID())
-}
-
-func (h *Header) UndoKey(cu *user.User) string {
-	return h.undoKey(cu)
-}
-
-type jGamesIndex struct {
-	Data            []*jHeader `json:"data"`
-	Draw            int        `json:"draw"`
-	RecordsTotal    int64      `json:"recordsTotal"`
-	RecordsFiltered int64      `json:"recordsFiltered"`
-}
-
-type jHeader struct {
-	ID          int64         `json:"id"`
-	Type        template.HTML `json:"type"`
-	Title       template.HTML `json:"title"`
-	Creator     template.HTML `json:"creator"`
-	Players     template.HTML `json:"players"`
-	NumPlayers  template.HTML `json:"numPlayers"`
-	OptString   template.HTML `json:"optString"`
-	Progress    template.HTML `json:"progress"`
-	Round       int           `json:"round"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
-	LastUpdated template.HTML `json:"lastUpdated"`
-	Public      template.HTML `json:"public"`
-	Actions     template.HTML `json:"actions"`
-	Status      Status        `json:"status"`
-}
+// type jGamesIndex struct {
+// 	Data            []*jHeader `json:"data"`
+// 	Draw            int        `json:"draw"`
+// 	RecordsTotal    int64      `json:"recordsTotal"`
+// 	RecordsFiltered int64      `json:"recordsFiltered"`
+// }
+//
+// type jHeader struct {
+// 	ID          int64         `json:"id"`
+// 	Type        template.HTML `json:"type"`
+// 	Title       template.HTML `json:"title"`
+// 	Creator     template.HTML `json:"creator"`
+// 	Players     template.HTML `json:"players"`
+// 	NumPlayers  template.HTML `json:"numPlayers"`
+// 	OptString   template.HTML `json:"optString"`
+// 	Progress    template.HTML `json:"progress"`
+// 	Round       int           `json:"round"`
+// 	UpdatedAt   time.Time     `json:"updatedAt"`
+// 	LastUpdated template.HTML `json:"lastUpdated"`
+// 	Public      template.HTML `json:"public"`
+// 	Actions     template.HTML `json:"actions"`
+// 	Status      Status        `json:"status"`
+// }
 
 // func (client Client) JSONIndexAction(c *gin.Context) {
 // 	client.Log.Debugf("Entering")
@@ -274,156 +269,156 @@ type jHeader struct {
 // 	c.JSON(http.StatusOK, data)
 // }
 
-func toGameTable(c *gin.Context, cu *user.User, cnt int64) (*jGamesIndex, error) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+// func toGameTable(c *gin.Context, cu *user.User, cnt int64) (*jGamesIndex, error) {
+// 	log.Debugf("Entering")
+// 	defer log.Debugf("Exiting")
+//
+// 	gs := GamersFrom(c)
+// 	table := new(jGamesIndex)
+// 	l := len(gs)
+// 	table.Data = make([]*jHeader, l)
+// 	for i, g := range gs {
+// 		h := g.GetHeader()
+// 		table.Data[i] = &jHeader{
+// 			ID:          g.GetHeader().ID(),
+// 			Type:        template.HTML(h.Type.String()),
+// 			Title:       titleLink(g),
+// 			Creator:     user.LinkFor(h.CreatorID, h.CreatorName),
+// 			Players:     h.PlayerLinks(cu),
+// 			NumPlayers:  template.HTML(fmt.Sprintf("%d / %d", h.AcceptedPlayers(), h.NumPlayers)),
+// 			Round:       h.Round,
+// 			OptString:   template.HTML(h.OptString),
+// 			Progress:    template.HTML(h.Progress),
+// 			UpdatedAt:   h.UpdatedAt,
+// 			LastUpdated: template.HTML(LastUpdated(time.Time(h.UpdatedAt))),
+// 			Public:      publicPrivate(g),
+// 			Actions:     actionButtons(c, cu, g),
+// 			Status:      h.Status,
+// 		}
+// 	}
+//
+// 	if draw, err := strconv.Atoi(c.PostForm("draw")); err != nil {
+// 		return nil, err
+// 	} else {
+// 		table.Draw = draw
+// 	}
+// 	table.RecordsTotal = cnt
+// 	table.RecordsFiltered = cnt
+// 	return table, nil
+// }
+//
+// func ToGameTable(c *gin.Context, gs []Gamer, cnt int64, cu *user.User) (*jGamesIndex, error) {
+// 	log.Debugf("Entering")
+// 	defer log.Debugf("Exiting")
+//
+// 	table := new(jGamesIndex)
+// 	l := len(gs)
+// 	table.Data = make([]*jHeader, l)
+// 	for i, g := range gs {
+// 		h := g.GetHeader()
+// 		table.Data[i] = &jHeader{
+// 			ID:          g.GetHeader().ID(),
+// 			Type:        template.HTML(h.Type.String()),
+// 			Title:       titleLink(g),
+// 			Creator:     user.LinkFor(h.CreatorID, h.CreatorName),
+// 			Players:     h.PlayerLinks(cu),
+// 			NumPlayers:  template.HTML(fmt.Sprintf("%d / %d", h.AcceptedPlayers(), h.NumPlayers)),
+// 			Round:       h.Round,
+// 			OptString:   template.HTML(h.OptString),
+// 			Progress:    template.HTML(h.Progress),
+// 			UpdatedAt:   h.UpdatedAt,
+// 			LastUpdated: template.HTML(LastUpdated(time.Time(h.UpdatedAt))),
+// 			Public:      publicPrivate(g),
+// 			Actions:     actionButtons(c, cu, g),
+// 			Status:      h.Status,
+// 		}
+// 	}
+//
+// 	if draw, err := strconv.Atoi(c.PostForm("draw")); err != nil {
+// 		return nil, err
+// 	} else {
+// 		table.Draw = draw
+// 	}
+// 	table.RecordsTotal = cnt
+// 	table.RecordsFiltered = cnt
+// 	return table, nil
+// }
 
-	gs := GamersFrom(c)
-	table := new(jGamesIndex)
-	l := len(gs)
-	table.Data = make([]*jHeader, l)
-	for i, g := range gs {
-		h := g.GetHeader()
-		table.Data[i] = &jHeader{
-			ID:          g.GetHeader().ID(),
-			Type:        template.HTML(h.Type.String()),
-			Title:       titleLink(g),
-			Creator:     user.LinkFor(h.CreatorID, h.CreatorName),
-			Players:     h.PlayerLinks(cu),
-			NumPlayers:  template.HTML(fmt.Sprintf("%d / %d", h.AcceptedPlayers(), h.NumPlayers)),
-			Round:       h.Round,
-			OptString:   template.HTML(h.OptString),
-			Progress:    template.HTML(h.Progress),
-			UpdatedAt:   h.UpdatedAt,
-			LastUpdated: template.HTML(LastUpdated(time.Time(h.UpdatedAt))),
-			Public:      publicPrivate(g),
-			Actions:     actionButtons(c, cu, g),
-			Status:      h.Status,
-		}
-	}
+// func publicPrivate(g Gamer) template.HTML {
+// 	h := g.GetHeader()
+// 	if h.Private() {
+// 		return template.HTML("Private")
+// 	} else {
+// 		return template.HTML("Public")
+// 	}
+// }
+//
+// func titleLink(g Gamer) template.HTML {
+// 	h := g.GetHeader()
+// 	return template.HTML(fmt.Sprintf(`
+// 		<div><a href="/%s/game/show/%d">%s</a></div>
+// 		<div style="font-size:.7em">%s</div>`, h.Type, h.ID(), h.Title, h.OptString))
+// }
 
-	if draw, err := strconv.Atoi(c.PostForm("draw")); err != nil {
-		return nil, err
-	} else {
-		table.Draw = draw
-	}
-	table.RecordsTotal = cnt
-	table.RecordsFiltered = cnt
-	return table, nil
-}
-
-func ToGameTable(c *gin.Context, gs []Gamer, cnt int64, cu *user.User) (*jGamesIndex, error) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	table := new(jGamesIndex)
-	l := len(gs)
-	table.Data = make([]*jHeader, l)
-	for i, g := range gs {
-		h := g.GetHeader()
-		table.Data[i] = &jHeader{
-			ID:          g.GetHeader().ID(),
-			Type:        template.HTML(h.Type.String()),
-			Title:       titleLink(g),
-			Creator:     user.LinkFor(h.CreatorID, h.CreatorName),
-			Players:     h.PlayerLinks(cu),
-			NumPlayers:  template.HTML(fmt.Sprintf("%d / %d", h.AcceptedPlayers(), h.NumPlayers)),
-			Round:       h.Round,
-			OptString:   template.HTML(h.OptString),
-			Progress:    template.HTML(h.Progress),
-			UpdatedAt:   h.UpdatedAt,
-			LastUpdated: template.HTML(LastUpdated(time.Time(h.UpdatedAt))),
-			Public:      publicPrivate(g),
-			Actions:     actionButtons(c, cu, g),
-			Status:      h.Status,
-		}
-	}
-
-	if draw, err := strconv.Atoi(c.PostForm("draw")); err != nil {
-		return nil, err
-	} else {
-		table.Draw = draw
-	}
-	table.RecordsTotal = cnt
-	table.RecordsFiltered = cnt
-	return table, nil
-}
-
-func publicPrivate(g Gamer) template.HTML {
-	h := g.GetHeader()
-	if h.Private() {
-		return template.HTML("Private")
-	} else {
-		return template.HTML("Public")
-	}
-}
-
-func titleLink(g Gamer) template.HTML {
-	h := g.GetHeader()
-	return template.HTML(fmt.Sprintf(`
-		<div><a href="/%s/game/show/%d">%s</a></div>
-		<div style="font-size:.7em">%s</div>`, h.Type, h.ID(), h.Title, h.OptString))
-}
-
-func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	h := g.GetHeader()
-	switch h.Status {
-	case Running:
-		t := h.Type
-		if g.GetHeader().IsCurrentPlayer(cu) {
-			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Play</a>`, t, h.ID()))
-		} else {
-			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Show</a>`, t, h.ID()))
-		}
-	case Recruiting:
-		t := h.Type
-		switch {
-		case g.CanAdd(cu):
-			if g.Private() {
-				return template.HTML(fmt.Sprintf(`
-	<div id="dialog-%d" title="Game %d">
-		<form class="top-padding" action="/%s/game/accept/%d" method="post">
-			<input id="password" name="password" type="text" value="Please Enter Password" />
-			<div>
-				&nbsp;
-			</div>
-			<div class="top-padding center" >
-				<input type="submit" value="Accept" class="mybutton" />
-			</div>
-		</form>
-	</div>
-	<div id="opener-%d" class="mybutton">Accept</div>
-	<script>
-		$('#dialog-%d').dialog({autoOpen: false, modal: true});
-		$('#opener-%d').click(function() {
-			$('#dialog-%d').dialog('open');
-		});
-	</script>`, h.ID(), h.ID(), h.Stub(), h.ID(), h.ID(), h.ID(), h.ID(), h.ID()))
-			} else {
-				return template.HTML(fmt.Sprintf(`
-				<form method="post" action="/%s/game/accept/%d">
-					<input name="_method" type="hidden" value="PUT" />
-					<input id="user_id" name="user[id]" type="hidden" value="%v">
-					<input id="accept-%d" class="mybutton" type="submit" value="Accept" />
-				</form>`, t, h.ID(), cu.ID(), h.ID()))
-			}
-		case g.CanDropout(cu):
-			return template.HTML(fmt.Sprintf(`
-				<form method="post" action="/%s/game/drop/%d">
-					<input name="_method" type="hidden" value="PUT" />
-					<input id="user_id" name="user[id]" type="hidden" value="%v">
-					<input id="drop-%d" class="mybutton" type="submit" value="Drop" />
-				</form>`, t, h.ID(), cu.ID(), h.ID()))
-		default:
-			return ""
-		}
-	default:
-		return ""
-	}
-}
+// func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
+// 	log.Debugf("Entering")
+// 	defer log.Debugf("Exiting")
+//
+// 	h := g.GetHeader()
+// 	switch h.Status {
+// 	case Running:
+// 		t := h.Type
+// 		if g.GetHeader().IsCurrentPlayer(cu) {
+// 			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Play</a>`, t, h.ID()))
+// 		} else {
+// 			return template.HTML(fmt.Sprintf(`<a class="mybutton" href="/%s/game/show/%d">Show</a>`, t, h.ID()))
+// 		}
+// 	case Recruiting:
+// 		t := h.Type
+// 		switch {
+// 		case g.CanAdd(cu):
+// 			if g.Private() {
+// 				return template.HTML(fmt.Sprintf(`
+// 	<div id="dialog-%d" title="Game %d">
+// 		<form class="top-padding" action="/%s/game/accept/%d" method="post">
+// 			<input id="password" name="password" type="text" value="Please Enter Password" />
+// 			<div>
+// 				&nbsp;
+// 			</div>
+// 			<div class="top-padding center" >
+// 				<input type="submit" value="Accept" class="mybutton" />
+// 			</div>
+// 		</form>
+// 	</div>
+// 	<div id="opener-%d" class="mybutton">Accept</div>
+// 	<script>
+// 		$('#dialog-%d').dialog({autoOpen: false, modal: true});
+// 		$('#opener-%d').click(function() {
+// 			$('#dialog-%d').dialog('open');
+// 		});
+// 	</script>`, h.ID(), h.ID(), h.Stub(), h.ID(), h.ID(), h.ID(), h.ID(), h.ID()))
+// 			} else {
+// 				return template.HTML(fmt.Sprintf(`
+// 				<form method="post" action="/%s/game/accept/%d">
+// 					<input name="_method" type="hidden" value="PUT" />
+// 					<input id="user_id" name="user[id]" type="hidden" value="%v">
+// 					<input id="accept-%d" class="mybutton" type="submit" value="Accept" />
+// 				</form>`, t, h.ID(), cu.ID(), h.ID()))
+// 			}
+// 		case g.CanDropout(cu):
+// 			return template.HTML(fmt.Sprintf(`
+// 				<form method="post" action="/%s/game/drop/%d">
+// 					<input name="_method" type="hidden" value="PUT" />
+// 					<input id="user_id" name="user[id]" type="hidden" value="%v">
+// 					<input id="drop-%d" class="mybutton" type="submit" value="Drop" />
+// 				</form>`, t, h.ID(), cu.ID(), h.ID()))
+// 		default:
+// 			return ""
+// 		}
+// 	default:
+// 		return ""
+// 	}
+// }
 
 type GOptions struct {
 	ItemsPerPage int
@@ -440,15 +435,15 @@ func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, 
 
 	q := datastore.
 		NewQuery(opt.Kind).
-		Filter("Status=", opt.Status).
+		FilterField("Status", "=", opt.Status).
 		Order("-UpdatedAt")
 
 	if opt.Type != All && opt.Type != NoType {
-		q = q.Filter("Type=", string(opt.Type))
+		q = q.FilterField("Type", "=", string(opt.Type))
 	}
 
 	if opt.UserID != 0 {
-		q = q.Filter("UserIDS=", opt.UserID)
+		q = q.FilterField("UserIDS", "=", opt.UserID)
 	}
 
 	cnt, err := cl.DS.Count(ctx, q)

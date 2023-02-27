@@ -46,7 +46,7 @@ type MLog struct {
 	Key        *datastore.Key `datastore:"__key__"`
 	Messages   []*Message     `datastore:"-"`
 	Read       map[int64]int  `datastore:"-" json:"read"`
-	SavedState []byte         `datastore:",noindex"`
+	SavedState string         `datastore:",noindex"`
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -65,10 +65,10 @@ func (ml *MLog) Load(ps []datastore.Property) error {
 		Read     map[int64]int `json:"read"`
 	}{}
 
-	err = json.Unmarshal(ml.SavedState, &obj)
+	err = json.Unmarshal([]byte(ml.SavedState), &obj)
 	if err != nil {
 		var ms []*Message
-		err = Decode(&ms, ml.SavedState)
+		err = Decode(&ms, []byte(ml.SavedState))
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func (ml *MLog) Save() ([]datastore.Property, error) {
 	if err != nil {
 		return nil, err
 	}
-	ml.SavedState = v
+	ml.SavedState = string(v)
 	return datastore.SaveStruct(ml)
 }
 

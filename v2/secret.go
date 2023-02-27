@@ -163,6 +163,7 @@ func (cl *CookieClient) NewStore(ctx context.Context) (Store, error) {
 	opts := sessions.Options{
 		Domain: "slothninja.com",
 		Path:   "/",
+		MaxAge: 60 * 60 * 24, // 1 Day in seconds
 		Secure: true,
 	}
 	store.Options(opts)

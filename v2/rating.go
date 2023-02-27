@@ -259,7 +259,7 @@ func (client *RatingClient) GetAll(c *gin.Context, uKey *datastore.Key) (Current
 func (client *RatingClient) GetFor(c *gin.Context, t Type) (CurrentRatings, error) {
 	q := datastore.NewQuery(crKind).
 		Ancestor(user.RootKey()).
-		Filter("Type=", string(t)).
+		FilterField("Type", "=", string(t)).
 		Order("-Low")
 
 	var rs CurrentRatings
@@ -334,11 +334,11 @@ func (client *RatingClient) getCurrentRatingsFiltered(c *gin.Context, t Type, le
 	q := getAllCurrentRatingsQuery(c)
 
 	if leader {
-		q = q.Filter("Leader=", true)
+		q = q.FilterField("Leader", "=", true)
 	}
 
 	if t != NoType {
-		q = q.Filter("Type=", string(t))
+		q = q.FilterField("Type", "=", string(t))
 	}
 
 	var cnt int64
@@ -400,7 +400,7 @@ func (client *RatingClient) getProjected(c *gin.Context, rs CurrentRatings) (Cur
 			return nil, err
 		}
 
-		if r.generated && r.generated && len(cs) == 0 {
+		if r.generated && len(cs) == 0 {
 			ps[i].generated = true
 		}
 	}
@@ -576,70 +576,70 @@ func (client *RatingClient) updateUser(c *gin.Context) {
 	}
 }
 
-func (client *RatingClient) Fetch(c *gin.Context) {
-	if CurrentRatingsFrom(c) != nil {
-		return
-	}
+// func (client *RatingClient) Fetch(c *gin.Context) {
+// 	if CurrentRatingsFrom(c) != nil {
+// 		return
+// 	}
+//
+// 	u := user.Fetched(c)
+// 	if u == nil {
+// 		// AddErrorf(c, "Unable to get ratings.")
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 		return
+// 	}
+//
+// 	rs, err := client.MultiFor(c, u)
+// 	if err != nil {
+// 		// AddErrorf(c, err.Error())
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 		return
+// 	}
+// 	c.Set(currentRatingsKey, rs)
+// }
 
-	u := user.Fetched(c)
-	if u == nil {
-		AddErrorf(c, "Unable to get ratings.")
-		c.Redirect(http.StatusSeeOther, homePath)
-		return
-	}
-
-	rs, err := client.MultiFor(c, u)
-	if err != nil {
-		AddErrorf(c, err.Error())
-		c.Redirect(http.StatusSeeOther, homePath)
-		return
-	}
-	c.Set(currentRatingsKey, rs)
-}
-
-func Fetched(c *gin.Context) CurrentRatings {
-	return CurrentRatingsFrom(c)
-}
-
-func (client *RatingClient) FetchProjected(c *gin.Context) {
-	if ProjectedFrom(c) != nil {
-		return
-	}
-
-	rs := Fetched(c)
-	if rs == nil {
-		AddErrorf(c, "Unable to get projected ratings")
-		c.Redirect(http.StatusSeeOther, homePath)
-		return
-	}
-
-	cm, err := client.Contest.Unapplied(c, user.Fetched(c).Key)
-	if err != nil {
-		AddErrorf(c, err.Error())
-		c.Redirect(http.StatusSeeOther, homePath)
-		return
-	}
-
-	if pr, err := rs.Projected(c, cm); err != nil {
-		AddErrorf(c, err.Error())
-		c.Redirect(http.StatusSeeOther, homePath)
-	} else {
-		c.Set(projectedKey, pr)
-	}
-}
+// func Fetched(c *gin.Context) CurrentRatings {
+// 	return CurrentRatingsFrom(c)
+// }
+//
+// func (client *RatingClient) FetchProjected(c *gin.Context) {
+// 	if ProjectedFrom(c) != nil {
+// 		return
+// 	}
+//
+// 	rs := Fetched(c)
+// 	if rs == nil {
+// 		AddErrorf(c, "Unable to get projected ratings")
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 		return
+// 	}
+//
+// 	cm, err := client.Contest.Unapplied(c, user.Fetched(c).Key)
+// 	if err != nil {
+// 		AddErrorf(c, err.Error())
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 		return
+// 	}
+//
+// 	if pr, err := rs.Projected(c, cm); err != nil {
+// 		AddErrorf(c, err.Error())
+// 		c.Redirect(http.StatusSeeOther, homePath)
+// 	} else {
+// 		c.Set(projectedKey, pr)
+// 	}
+// }
 
 func Projected(c *gin.Context) (pr Ratings) {
 	pr, _ = c.Value("Projected").(Ratings)
 	return
 }
 
-type jRating struct {
-	Type template.HTML `json:"type"`
-	R    float64       `json:"r"`
-	RD   float64       `json:"rd"`
-	Low  float64       `json:"low"`
-	High float64       `json:"high"`
-}
+// type jRating struct {
+// 	Type template.HTML `json:"type"`
+// 	R    float64       `json:"r"`
+// 	RD   float64       `json:"rd"`
+// 	Low  float64       `json:"low"`
+// 	High float64       `json:"high"`
+// }
 
 type jCombined struct {
 	Rank      int           `json:"rank"`
@@ -749,7 +749,7 @@ func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCo
 	table = new(jCombinedRatingsIndex)
 	l1, l2 := len(rs), len(ps)
 	if l1 != l2 {
-		err = fmt.Errorf("Length mismatch between ratings and projected ratings l1: %d l2: %d.", l1, l2)
+		err = fmt.Errorf("length mismatch between ratings and projected ratings l1: %d l2: %d", l1, l2)
 		return
 	}
 
@@ -781,7 +781,7 @@ func toCombined(c *gin.Context, us user.Users, rs, ps CurrentRatings, o int32, c
 	table := new(jCombinedRatingsIndex)
 	l1, l2 := len(rs), len(ps)
 	if l1 != l2 {
-		return nil, fmt.Errorf("Length mismatch between ratings and projected ratings l1: %d l2: %d.", l1, l2)
+		return nil, fmt.Errorf("length mismatch between ratings and projected ratings l1: %d l2: %d", l1, l2)
 	}
 	table.Data = make([]*jCombined, 0)
 	for i, r := range rs {

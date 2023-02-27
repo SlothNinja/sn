@@ -1,20 +1,16 @@
 package sn
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/SlothNinja/log"
 	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
-	"github.com/mailjet/mailjet-apiv3-go"
 )
 
 // Header provides fields common to all games.
@@ -218,10 +214,10 @@ func (ss Strings) Include(s string) bool {
 	return false
 }
 
-func actionPath(r *http.Request) string {
-	s := strings.Split(r.URL.String(), "/")
-	return s[len(s)-1]
-}
+// func actionPath(r *http.Request) string {
+// 	s := strings.Split(r.URL.String(), "/")
+// 	return s[len(s)-1]
+// }
 
 func (h *Header) FromParams(c *gin.Context, cu *user.User, t Type) error {
 	log.Debugf("Entering")
@@ -306,14 +302,14 @@ func include(ints []int64, i int64) bool {
 	return false
 }
 
-func remove(ints []int64, i int64) []int64 {
-	for index, j := range ints {
-		if j == i {
-			return append(ints[:index], ints[index+1:]...)
-		}
-	}
-	return ints
-}
+// func remove(ints []int64, i int64) []int64 {
+// 	for index, j := range ints {
+// 		if j == i {
+// 			return append(ints[:index], ints[index+1:]...)
+// 		}
+// 	}
+// 	return ints
+// }
 
 func (h *Header) CanAdd(u *user.User) bool {
 	return u != nil && len(h.UserIDS) < h.NumPlayers && !include(h.UserIDS, u.ID())
@@ -610,13 +606,13 @@ func (h *Header) IsWinner(u *user.User) bool {
 	return false
 }
 
-func (h *Header) UserLinks() template.HTML {
-	links := make([]string, len(h.UserIDS))
-	for i, uid := range h.UserIDS {
-		links[i] = string(h.UserLinkFor(uid))
-	}
-	return template.HTML(ToSentence(links))
-}
+// func (h *Header) UserLinks() template.HTML {
+// 	links := make([]string, len(h.UserIDS))
+// 	for i, uid := range h.UserIDS {
+// 		links[i] = string(h.UserLinkFor(uid))
+// 	}
+// 	return template.HTML(ToSentence(links))
+// }
 
 func (h *Header) UserLinkFor(uid int64) template.HTML {
 	return user.LinkFor(uid, h.NameByUID(uid))
@@ -657,30 +653,30 @@ func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
 	return template.HTML(result)
 }
 
-func (h *Header) PlayerLinks(cu *user.User) template.HTML {
-	if h.Status == Recruiting {
-		return h.UserLinks()
-	}
+// func (h *Header) PlayerLinks(cu *user.User) template.HTML {
+// 	if h.Status == Recruiting {
+// 		return h.UserLinks()
+// 	}
+//
+// 	links := make([]string, len(h.OrderIDS))
+// 	for i, pid := range h.OrderIDS {
+// 		links[i] = string(h.PlayerLinkByPID(cu, pid))
+// 	}
+// 	return template.HTML(ToSentence(links))
+// }
 
-	links := make([]string, len(h.OrderIDS))
-	for i, pid := range h.OrderIDS {
-		links[i] = string(h.PlayerLinkByPID(cu, pid))
-	}
-	return template.HTML(ToSentence(links))
-}
-
-func (h *Header) CurrentPlayerLinks(cu *user.User) template.HTML {
-	cps := h.CPUserIndices
-	if len(cps) == 0 || h.Status != Running {
-		return "None"
-	}
-
-	links := make([]string, len(cps))
-	for j, uIndex := range cps {
-		links[j] = string(h.PlayerLinkByPID(cu, uIndex.ToPID()))
-	}
-	return template.HTML(ToSentence(links))
-}
+// func (h *Header) CurrentPlayerLinks(cu *user.User) template.HTML {
+// 	cps := h.CPUserIndices
+// 	if len(cps) == 0 || h.Status != Running {
+// 		return "None"
+// 	}
+//
+// 	links := make([]string, len(cps))
+// 	for j, uIndex := range cps {
+// 		links[j] = string(h.PlayerLinkByPID(cu, uIndex.ToPID()))
+// 	}
+// 	return template.HTML(ToSentence(links))
+// }
 
 func (h *Header) NoCurrentPlayer() bool {
 	return len(h.CPUserIndices) == 0
@@ -873,101 +869,101 @@ var subPhaseNameMaps SubPhaseNameMaps
 
 func (h *Header) ValidateHeader() error {
 	if len(h.UserIDS) > h.NumPlayers {
-		return fmt.Errorf("UserIDS can't be greater than the number of players.")
+		return fmt.Errorf("UserIDS can't be greater than the number of players")
 	}
 	return nil
 }
 
-func (h *Header) notificationFor(c *gin.Context, p Playerer) (mailjet.InfoMessagesV31, error) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+// func (h *Header) notificationFor(c *gin.Context, p Playerer) (mailjet.InfoMessagesV31, error) {
+// 	log.Debugf("Entering")
+// 	defer log.Debugf("Exiting")
+//
+// 	gInfo := inf{GameID: h.ID(), Type: h.Type, Title: h.Title}
+// 	buf := new(bytes.Buffer)
+//
+// 	msg := mailjet.InfoMessagesV31{
+// 		From: &mailjet.RecipientV31{
+// 			Email: "webmaster@slothninja.com",
+// 			Name:  "Webmaster",
+// 		},
+// 	}
+//
+// 	tmpl := TemplatesFrom(c)["shared/turn_notification"]
+//
+// 	msg.Subject = fmt.Sprintf("SlothNinja Games: It's your turn in %s (%d)", gInfo.Title, gInfo.GameID)
+//
+// 	err := tmpl.Execute(buf, gin.H{"Game": gInfo})
+// 	if err != nil {
+// 		return msg, err
+// 	}
+//
+// 	msg.HTMLPart = buf.String()
+// 	msg.To = &mailjet.RecipientsV31{
+// 		mailjet.RecipientV31{
+// 			Email: h.EmailFor(p.ID()),
+// 			Name:  h.NameFor(p.ID()),
+// 		},
+// 	}
+// 	return msg, nil
+// }
 
-	gInfo := inf{GameID: h.ID(), Type: h.Type, Title: h.Title}
-	buf := new(bytes.Buffer)
+// func (h *Header) SendTurnNotificationsTo(c *gin.Context, ps ...Playerer) error {
+// 	log.Debugf("Entering")
+// 	defer log.Debugf("Exiting")
+//
+// 	if h.Type == Indonesia {
+// 		return nil
+// 	}
+//
+// 	l := len(ps)
+// 	if l == 0 {
+// 		return nil
+// 	}
+//
+// 	if l == 1 {
+// 		msg, err := h.notificationFor(c, ps[0])
+// 		if err != nil {
+// 			return err
+// 		}
+//
+// 		_, err = SendMessages(c, msg)
+// 		return err
+// 	}
+//
+// 	isNil := true
+// 	me := make(datastore.MultiError, l)
+// 	for i, p := range ps {
+// 		msg, err := h.notificationFor(c, p)
+// 		me[i] = err
+// 		if err != nil {
+// 			isNil = false
+// 			continue
+// 		}
+// 		_, err = SendMessages(c, msg)
+// 		me[i] = err
+// 		if err != nil {
+// 			isNil = false
+// 		}
+// 	}
+//
+// 	if isNil {
+// 		return nil
+// 	}
+// 	return me
+// }
 
-	msg := mailjet.InfoMessagesV31{
-		From: &mailjet.RecipientV31{
-			Email: "webmaster@slothninja.com",
-			Name:  "Webmaster",
-		},
-	}
-
-	tmpl := TemplatesFrom(c)["shared/turn_notification"]
-
-	msg.Subject = fmt.Sprintf("SlothNinja Games: It's your turn in %s (%d)", gInfo.Title, gInfo.GameID)
-
-	err := tmpl.Execute(buf, gin.H{"Game": gInfo})
-	if err != nil {
-		return msg, err
-	}
-
-	msg.HTMLPart = buf.String()
-	msg.To = &mailjet.RecipientsV31{
-		mailjet.RecipientV31{
-			Email: h.EmailFor(p.ID()),
-			Name:  h.NameFor(p.ID()),
-		},
-	}
-	return msg, nil
-}
-
-func (h *Header) SendTurnNotificationsTo(c *gin.Context, ps ...Playerer) error {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
-
-	if h.Type == Indonesia {
-		return nil
-	}
-
-	l := len(ps)
-	if l == 0 {
-		return nil
-	}
-
-	if l == 1 {
-		msg, err := h.notificationFor(c, ps[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = SendMessages(c, msg)
-		return err
-	}
-
-	isNil := true
-	me := make(datastore.MultiError, l)
-	for i, p := range ps {
-		msg, err := h.notificationFor(c, p)
-		me[i] = err
-		if err != nil {
-			isNil = false
-			continue
-		}
-		_, err = SendMessages(c, msg)
-		me[i] = err
-		if err != nil {
-			isNil = false
-		}
-	}
-
-	if isNil {
-		return nil
-	}
-	return me
-}
-
-type withID struct {
-	*Header
-}
-
-func (wid *withID) MarshalJSON() ([]byte, error) {
-	jHeader := struct {
-		ID          int64  `json:"id"`
-		LastUpdated string `json:"lastUpdated"`
-		*Header
-	}{wid.Key.ID, lastUpdated(wid.UpdatedAt), wid.Header}
-	return json.Marshal(jHeader)
-}
+// type withID struct {
+// 	*Header
+// }
+//
+// func (wid *withID) MarshalJSON() ([]byte, error) {
+// 	jHeader := struct {
+// 		ID          int64  `json:"id"`
+// 		LastUpdated string `json:"lastUpdated"`
+// 		*Header
+// 	}{wid.Key.ID, lastUpdated(wid.UpdatedAt), wid.Header}
+// 	return json.Marshal(jHeader)
+// }
 
 const (
 	minute = time.Minute

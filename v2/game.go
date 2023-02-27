@@ -22,9 +22,9 @@ type GetPlayerers interface {
 	GetPlayerers() Playerers
 }
 
-type hasUpdate interface {
-	Update(*gin.Context) (string, ActionType, error)
-}
+// type hasUpdate interface {
+// 	Update(*gin.Context) (string, ActionType, error)
+// }
 
 func GamesRoot(c *gin.Context) *datastore.Key {
 	return datastore.NameKey("Games", "root", nil)

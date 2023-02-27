@@ -28,7 +28,7 @@ func NewContestClient(snClient *client.Client) *ContestClient {
 }
 
 type Contest struct {
-	c         *gin.Context
+	// c         *gin.Context
 	Key       *datastore.Key `datastore:"__key__"`
 	GameID    int64
 	Type      Type
@@ -75,9 +75,9 @@ func New(id int64, pk *datastore.Key, gid int64, t Type, r, rd, outcome float64)
 	}
 }
 
-func key(id int64, pk *datastore.Key) *datastore.Key {
-	return datastore.IDKey(contestKind, id, pk)
-}
+// func key(id int64, pk *datastore.Key) *datastore.Key {
+// 	return datastore.IDKey(contestKind, id, pk)
+// }
 
 func (client *ContestClient) GenContests(places []ResultsMap) map[*datastore.Key][]*Contest {
 	cs := make(map[*datastore.Key][]*Contest)
@@ -109,8 +109,8 @@ func (client *ContestClient) UnappliedFor(c *gin.Context, ukey *datastore.Key, t
 
 	q := datastore.NewQuery(contestKind).
 		Ancestor(ukey).
-		Filter("Applied=", false).
-		Filter("Type=", string(t)).
+		FilterField("Applied", "=", false).
+		FilterField("Type", "=", string(t)).
 		KeysOnly()
 
 	ks, err := client.DS.GetAll(c, q, nil)
@@ -131,7 +131,7 @@ type ContestMap map[Type][]*Contest
 func (client *ContestClient) Unapplied(c *gin.Context, ukey *datastore.Key) (ContestMap, error) {
 	q := datastore.NewQuery(contestKind).
 		Ancestor(ukey).
-		Filter("Applied=", false).
+		FilterField("Applied", "=", false).
 		KeysOnly()
 
 	ks, err := client.DS.GetAll(c, q, nil)
