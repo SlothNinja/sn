@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,8 +16,8 @@ type Header struct {
 	c     *gin.Context
 	gamer interface{}
 
-	Creator *user.User     `datastore:"-" json:"-"`
-	Users   user.Users     `datastore:"-" json:"users"`
+	Creator *User          `datastore:"-" json:"-"`
+	Users   Users          `datastore:"-" json:"users"`
 	Key     *datastore.Key `datastore:"__key__"`
 
 	Type                      Type             `json:"type"`
@@ -99,19 +97,19 @@ type headerer interface {
 	PlayererByUserID(int64) Playerer
 	PlayererByIndex(int) Playerer
 	Winnerers() Playerers
-	User(UIndex) *user.User
+	User(UIndex) *User
 	CurrentPlayerers() []Playerer
 	NextPlayerer(...Playerer) Playerer
 	DefaultColorMap() []Color
 	UserLinks() template.HTML
 	Private() bool
-	CanAdd(*user.User) bool
-	CanDropout(*user.User) bool
+	CanAdd(*User) bool
+	CanDropout(*User) bool
 	Stub() string
 	CTX() *gin.Context
-	Accept(*gin.Context, *user.User) (bool, error)
-	Drop(*user.User) error
-	IsCurrentPlayer(*user.User) bool
+	Accept(*gin.Context, *User) (bool, error)
+	Drop(*User) error
+	IsCurrentPlayer(*User) bool
 }
 
 func (h Header) ID() int64 {
@@ -191,7 +189,7 @@ func (h *Header) DefaultColorMap() []Color {
 	return defaultColorMaps[h.Type]
 }
 
-func (h *Header) ColorMapFor(u *user.User) ColorMap {
+func (h *Header) ColorMapFor(u *User) ColorMap {
 	cm := h.DefaultColorMap()
 	if u != nil {
 		if p := h.PlayererByUserID(u.ID()); p != nil {
@@ -219,9 +217,9 @@ func (ss Strings) Include(s string) bool {
 // 	return s[len(s)-1]
 // }
 
-func (h *Header) FromParams(c *gin.Context, cu *user.User, t Type) error {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+func (h *Header) FromParams(c *gin.Context, cu *User, t Type) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	h.Title = cu.Name + "'s Game"
 	h.Status = Recruiting
@@ -229,9 +227,9 @@ func (h *Header) FromParams(c *gin.Context, cu *user.User, t Type) error {
 	return nil
 }
 
-func (h *Header) FromForm(c *gin.Context, cu *user.User, t Type) error {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+func (h *Header) FromForm(c *gin.Context, cu *User, t Type) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	obj := struct {
 		Title      string `form:"title"`
@@ -262,7 +260,7 @@ func (h *Header) FromForm(c *gin.Context, cu *user.User, t Type) error {
 	return nil
 }
 
-func (h *Header) User(index UIndex) *user.User {
+func (h *Header) User(index UIndex) *User {
 	i := int(index)
 	l := len(h.UserIDS)
 	if l > 0 {
@@ -277,9 +275,9 @@ func (client *Client) AfterLoad(c *gin.Context, h *Header) error {
 }
 
 func (h *Header) AfterLoad() {
-	h.Users = make(user.Users, len(h.UserIDS))
+	h.Users = make(Users, len(h.UserIDS))
 	for i, id := range h.UserIDS {
-		h.Users[i] = user.New(id)
+		h.Users[i] = NewUser(id)
 		if i >= 0 && i < len(h.UserNames) {
 			h.Users[i].Name = h.UserNames[i]
 		}
@@ -288,7 +286,7 @@ func (h *Header) AfterLoad() {
 		}
 	}
 
-	h.Creator = user.New(h.CreatorID)
+	h.Creator = NewUser(h.CreatorID)
 	h.Creator.Name = h.CreatorName
 	h.Creator.Email = h.CreatorEmail
 }
@@ -311,11 +309,11 @@ func include(ints []int64, i int64) bool {
 // 	return ints
 // }
 
-func (h *Header) CanAdd(u *user.User) bool {
+func (h *Header) CanAdd(u *User) bool {
 	return u != nil && len(h.UserIDS) < h.NumPlayers && !include(h.UserIDS, u.ID())
 }
 
-func (h *Header) CanDropout(u *user.User) bool {
+func (h *Header) CanDropout(u *User) bool {
 	return u != nil && h.Status == Recruiting && include(h.UserIDS, u.ID())
 }
 
@@ -327,11 +325,11 @@ func (h *Header) Private() bool {
 	return h.Password != ""
 }
 
-func (h *Header) HasUser(u *user.User) bool {
+func (h *Header) HasUser(u *User) bool {
 	return u != nil && include(h.UserIDS, u.ID())
 }
 
-func (h *Header) RemoveUser(u2 *user.User) {
+func (h *Header) RemoveUser(u2 *User) {
 	i := h.IndexFor(u2.ID())
 	if i == UIndexNotFound {
 		return
@@ -360,7 +358,7 @@ func (h *Header) RemoveUser(u2 *user.User) {
 	}
 }
 
-func (h *Header) AddUser(u *user.User) {
+func (h *Header) AddUser(u *User) {
 	h.UserIDS = append(h.UserIDS, u.ID())
 	h.UserKeys = append(h.UserKeys, u.Key)
 	h.UserNames = append(h.UserNames, u.Name)
@@ -370,7 +368,7 @@ func (h *Header) AddUser(u *user.User) {
 	h.UserGravTypes = append(h.UserGravTypes, u.GravType)
 }
 
-func (h *Header) AddCreator(u *user.User) {
+func (h *Header) AddCreator(u *User) {
 	h.Creator = u
 	h.CreatorID = u.ID()
 	h.CreatorKey = u.Key
@@ -381,7 +379,7 @@ func (h *Header) AddCreator(u *user.User) {
 	h.CreatorGravType = u.GravType
 }
 
-func (h *Header) AddUsers(us ...*user.User) {
+func (h *Header) AddUsers(us ...*User) {
 	for _, u := range us {
 		h.AddUser(u)
 	}
@@ -402,26 +400,26 @@ func (h *Header) CurrentPlayerFrom(ps Playerers) (cp Playerer) {
 	return
 }
 
-func (h *Header) CurrentUserPlayerer(cu *user.User) Playerer {
+func (h *Header) CurrentUserPlayerer(cu *User) Playerer {
 	switch cps := h.CurrentUserPlayerers(cu); len(cps) {
 	case 0:
 		return nil
 	case 1:
 		return cps[0]
 	default:
-		log.Warningf("CurrentUserPlayerer found %d current user players.  Returned only the first.")
+		Warningf("CurrentUserPlayerer found %d current user players.  Returned only the first.")
 		return cps[0]
 	}
 }
 
-func isAdmin(u *user.User) bool {
-	if u == nil {
-		return false
-	}
-	return u.Admin
-}
+// func isAdmin(u *User) bool {
+// 	if u == nil {
+// 		return false
+// 	}
+// 	return u.Admin
+// }
 
-func (h *Header) CurrentUserPlayerers(cu *user.User) Playerers {
+func (h *Header) CurrentUserPlayerers(cu *User) Playerers {
 	if cu == nil {
 		return nil
 	}
@@ -436,7 +434,7 @@ func (h *Header) CurrentUserPlayerers(cu *user.User) Playerers {
 
 // CurrentPlayererFor returns the current player from players ps associated with the user u.
 // If no player is associated with the user, but user is admin, then returns default current player.
-func (h *Header) CurrentPlayerFor(ps Playerers, u *user.User) (cp Playerer) {
+func (h *Header) CurrentPlayerFor(ps Playerers, u *User) (cp Playerer) {
 	if u == nil {
 		return
 	}
@@ -482,8 +480,8 @@ func (h *Header) CurrentPlayersFrom(players Playerers) (ps Playerers) {
 }
 
 func (h *Header) NextPlayerer(p Playerer) Playerer {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if p == nil {
 		return nil
@@ -499,8 +497,8 @@ func (h *Header) NextPlayerer(p Playerer) Playerer {
 }
 
 func (h *Header) PreviousPlayerer(p Playerer) Playerer {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if p == nil {
 		return nil
@@ -568,28 +566,28 @@ func (h *Header) isCP(uIndex UIndex) bool {
 }
 
 // IsCurrentPlayer returns true if the specified user is the current player.
-func (h *Header) IsCurrentPlayer(u *user.User) bool {
+func (h *Header) IsCurrentPlayer(u *User) bool {
 	return u != nil && h.isCP(h.IndexFor(u.ID()))
 }
 
 // IsCurrentPlayer returns ture if the user is the current player or an admin.
-func (h *Header) IsCurrentPlayerOrAdmin(u *user.User) bool {
+func (h *Header) IsCurrentPlayerOrAdmin(u *User) bool {
 	return u != nil && (isAdmin(u) || h.IsCurrentPlayer(u))
 }
 
-func (h *Header) isCurrentPlayerOrAdmin(c *gin.Context, u *user.User) bool {
+func (h *Header) isCurrentPlayerOrAdmin(c *gin.Context, u *User) bool {
 	return u != nil && (isAdmin(u) || h.IsCurrentPlayer(u))
 }
 
 // CurrentUserIsCurrentPlayerOrAdmin returns true if current user is the current player or is an administrator.
 // Deprecated in favor of CUserIsCPlayerOrAdmin
-func (h *Header) CurrentUserIsCurrentPlayerOrAdmin(cu *user.User) bool {
+func (h *Header) CurrentUserIsCurrentPlayerOrAdmin(cu *User) bool {
 	c := h.CTX()
-	log.Warningf("CurrentUserIsCurrentPlayerOrAdmin is deprecated in favor of CUserIsCPlayerOrAdmin.")
+	Warningf("CurrentUserIsCurrentPlayerOrAdmin is deprecated in favor of CUserIsCPlayerOrAdmin.")
 	return h.isCurrentPlayerOrAdmin(c, cu)
 }
 
-func (h *Header) PlayerIsUser(p Playerer, u *user.User) bool {
+func (h *Header) PlayerIsUser(p Playerer, u *User) bool {
 	return p != nil && u != nil && h.UserIDFor(p.ID()) == u.ID()
 }
 
@@ -597,7 +595,7 @@ func (h *Header) IsW(uIndex UIndex) bool {
 	return HasUIndex(h.WinnerIDS, uIndex)
 }
 
-func (h *Header) IsWinner(u *user.User) bool {
+func (h *Header) IsWinner(u *User) bool {
 	for _, p := range h.PlayerersByUser(u) {
 		if HasUIndex(h.WinnerIDS, p.UIndex()) {
 			return true
@@ -615,10 +613,10 @@ func (h *Header) IsWinner(u *user.User) bool {
 // }
 
 func (h *Header) UserLinkFor(uid int64) template.HTML {
-	return user.LinkFor(uid, h.NameByUID(uid))
+	return LinkFor(uid, h.NameByUID(uid))
 }
 
-func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
+func (h *Header) PlayerLinkByPID(cu *User, pid PID) template.HTML {
 	i := pid.ToIndex()
 	uid := h.UserIDS[pid.ToIndex()]
 
@@ -632,7 +630,7 @@ func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
 	w := h.IsW(i)
 	n := h.NameFor(pid)
 
-	path := user.PathFor(uid)
+	path := PathFor(uid)
 	result := fmt.Sprintf(`<a href=%q >%s</a>`, path, n)
 	switch h.Status {
 	case Running:
@@ -653,7 +651,7 @@ func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
 	return template.HTML(result)
 }
 
-// func (h *Header) PlayerLinks(cu *user.User) template.HTML {
+// func (h *Header) PlayerLinks(cu *User) template.HTML {
 // 	if h.Status == Recruiting {
 // 		return h.UserLinks()
 // 	}
@@ -665,7 +663,7 @@ func (h *Header) PlayerLinkByPID(cu *user.User, pid PID) template.HTML {
 // 	return template.HTML(ToSentence(links))
 // }
 
-// func (h *Header) CurrentPlayerLinks(cu *user.User) template.HTML {
+// func (h *Header) CurrentPlayerLinks(cu *User) template.HTML {
 // 	cps := h.CPUserIndices
 // 	if len(cps) == 0 || h.Status != Running {
 // 		return "None"
@@ -751,7 +749,7 @@ func PlayererByUserID(ps Playerers, id int64) (p Playerer) {
 	return
 }
 
-func (h *Header) PlayerersByUser(user *user.User) Playerers {
+func (h *Header) PlayerersByUser(user *User) Playerers {
 	var ps Playerers
 	for _, p := range h.gamer.(GetPlayerers).GetPlayerers() {
 		if p.User().Equal(user) {
@@ -875,8 +873,8 @@ func (h *Header) ValidateHeader() error {
 }
 
 // func (h *Header) notificationFor(c *gin.Context, p Playerer) (mailjet.InfoMessagesV31, error) {
-// 	log.Debugf("Entering")
-// 	defer log.Debugf("Exiting")
+// 	Debugf(msgEnter)
+// 	defer Debugf(msgExit)
 //
 // 	gInfo := inf{GameID: h.ID(), Type: h.Type, Title: h.Title}
 // 	buf := new(bytes.Buffer)
@@ -908,8 +906,8 @@ func (h *Header) ValidateHeader() error {
 // }
 
 // func (h *Header) SendTurnNotificationsTo(c *gin.Context, ps ...Playerer) error {
-// 	log.Debugf("Entering")
-// 	defer log.Debugf("Exiting")
+// 	Debugf(msgEnter)
+// 	defer Debugf(msgExit)
 //
 // 	if h.Type == Indonesia {
 // 		return nil

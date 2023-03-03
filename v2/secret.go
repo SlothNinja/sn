@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/client"
-	"github.com/SlothNinja/log"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gorilla/securecookie"
@@ -31,11 +29,11 @@ type Secret struct {
 
 // CookieClient for generating secure cookie store
 type CookieClient struct {
-	*client.Client
+	*Client
 }
 
 // NewCookieClient creates a client for generating a secured cookie store
-func NewCookieClient(snClient *client.Client) *CookieClient {
+func NewCookieClient(snClient *Client) *CookieClient {
 	return &CookieClient{snClient}
 }
 
@@ -138,15 +136,15 @@ type Store cookie.Store
 
 // NewStore generates a new secure cookie store
 func (cl *CookieClient) NewStore(ctx context.Context) (Store, error) {
-	log.Debugf(msgEnter)
-	defer log.Debugf(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	s, err := cl.get(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if !client.IsProduction() {
+	if !IsProduction() {
 		cl.Log.Debugf("hashKey: %s\nblockKey: %s",
 			base64.StdEncoding.EncodeToString(s.HashKey),
 			base64.StdEncoding.EncodeToString(s.BlockKey),

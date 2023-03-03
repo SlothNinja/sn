@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/client"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	elogo "github.com/kortemy/elo-go"
@@ -47,16 +46,15 @@ func (e Elo) IncompleteKey() *datastore.Key {
 	return datastore.IncompleteKey(eloKind, e.Key.Parent)
 }
 
-func eloCopy(elo *Elo) *Elo {
-	elo2 := *elo
-	return &elo2
+func eloCopy(elo Elo) *Elo {
+	return &elo
 }
 
 type EloClient struct {
-	*client.Client
+	*Client
 }
 
-func NewEloClient(snClient *client.Client, prefix string) *EloClient {
+func NewEloClient(snClient *Client, prefix string) *EloClient {
 	client := &EloClient{
 		Client: snClient,
 	}
@@ -143,7 +141,7 @@ func updateEloFor(uKey1 *datastore.Key, elos eloMap, places PlacesMap) int {
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uKeys
 func (cl *EloClient) Update(c *gin.Context, uKeys []*datastore.Key, places PlacesMap) ([]*Elo, []*Elo, error) {
 
-	elos, err := cl.GetByUserKeys(c, uKeys)
+	oldElos, err := cl.GetByUserKeys(c, uKeys)
 
 	// if ErrNoSuchEntity need to create initial Elo entity for player.
 	if err != nil {
@@ -154,25 +152,25 @@ func (cl *EloClient) Update(c *gin.Context, uKeys []*datastore.Key, places Place
 
 		for i, err1 := range merr {
 			if err1 == datastore.ErrNoSuchEntity {
-				elos[i] = newEloDefault(uKeys[i])
+				oldElos[i] = newEloDefault(uKeys[i])
 			}
 		}
 	}
 
-	updated := make([]*Elo, len(uKeys))
-	eloMap := make(map[*datastore.Key]*Elo, len(elos))
-	for i, elo := range elos {
+	newElos := make([]*Elo, len(uKeys))
+	eloMap := make(map[*datastore.Key]*Elo, len(oldElos))
+	for i, elo := range oldElos {
 		eloMap[uKeys[i]] = elo
-		updated[i] = eloCopy(elo)
+		newElos[i] = eloCopy(*elo)
 	}
 
 	t := time.Now()
 	for i, uKey := range uKeys {
-		updated[i].Rating = updateEloFor(uKey, eloMap, places)
-		updated[i].UpdatedAt = t
+		newElos[i].Rating = updateEloFor(uKey, eloMap, places)
+		newElos[i].UpdatedAt = t
 	}
 
-	return updated, elos, nil
+	return oldElos, newElos, nil
 }
 
 // const (

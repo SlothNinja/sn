@@ -7,7 +7,6 @@ import (
 	"html/template"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/user"
 	"github.com/elliotchance/pie/v2"
 )
 
@@ -39,7 +38,7 @@ const NoPID PID = 0
 
 type Player struct {
 	gamer           Gamer
-	user            *user.User
+	user            *User
 	rating          *CurrentRating
 	IDF             PID  `form:"idf"`
 	PerformedAction bool `form:"performed-action"`
@@ -50,7 +49,7 @@ type Player struct {
 type Players []*Player
 
 type jPlayer struct {
-	User            *user.User     `json:"user"`
+	User            *User          `json:"user"`
 	Rating          *CurrentRating `json:"rating"`
 	IDF             PID            `json:"id"`
 	PerformedAction bool           `json:"performedAction"`
@@ -75,7 +74,7 @@ func (p *Player) MarshalJSON() ([]byte, error) {
 type Playerer interface {
 	ID() PID
 	UIndex() UIndex
-	User() *user.User
+	User() *User
 	Name() string
 	Color() Color
 	ColorMap() []Color
@@ -132,7 +131,7 @@ func (p *Player) NotEqual(p2 Playerer) bool {
 	return !p.Equal(p2)
 }
 
-func (p *Player) User() *user.User {
+func (p *Player) User() *User {
 	if p.user == nil {
 		p.user = p.gamer.User(p.UIndex())
 	}
@@ -252,7 +251,7 @@ func (p *Player) TextColor() (c Color) {
 
 // A bit of a misnomer
 // Returns whether the current user is the same as the player's user
-func (p *Player) IsCurrentUser(cu *user.User) bool {
+func (p *Player) IsCurrentUser(cu *User) bool {
 	if p == nil {
 		return false
 	}
@@ -288,11 +287,11 @@ func (p *Player) Gravatar() string {
 
 func (h *Header) GravatarFor(pid PID) template.HTML {
 	return template.HTML(fmt.Sprintf(`<a href=%q ><img src=%q alt="Gravatar" class="%s-border" /> </a>`,
-		h.UserPathFor(pid), user.GravatarURL(h.EmailFor(pid), "80", h.GravTypeFor(pid)), h.ColorFor(pid)))
+		h.UserPathFor(pid), GravatarURL(h.EmailFor(pid), "80", h.GravTypeFor(pid)), h.ColorFor(pid)))
 }
 
 func (h *Header) UserPathFor(pid PID) template.HTML {
-	return user.PathFor(h.UserIDFor(pid))
+	return PathFor(h.UserIDFor(pid))
 }
 
 func (h *Header) ColorFor(pid PID) Color {

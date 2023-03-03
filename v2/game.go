@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -13,18 +11,14 @@ import (
 type Gamers []Gamer
 type Gamer interface {
 	PhaseName() string
-	FromParams(*gin.Context, *user.User, Type) error
-	ColorMapFor(*user.User) ColorMap
+	FromParams(*gin.Context, *User, Type) error
+	ColorMapFor(*User) ColorMap
 	headerer
 }
 
 type GetPlayerers interface {
 	GetPlayerers() Playerers
 }
-
-// type hasUpdate interface {
-// 	Update(*gin.Context) (string, ActionType, error)
-// }
 
 func GamesRoot(c *gin.Context) *datastore.Key {
 	return datastore.NameKey("Games", "root", nil)
@@ -49,9 +43,9 @@ func (h *Header) RandomTurnOrder() {
 }
 
 // Returns (true, nil) if game should be started
-func (h *Header) Accept(c *gin.Context, u *user.User) (start bool, err error) {
-	log.Debugf("Entering")
-	defer log.Debugf("Exiting")
+func (h *Header) Accept(c *gin.Context, u *User) (start bool, err error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	err = h.validateAccept(c, u)
 	if err != nil {
@@ -59,14 +53,14 @@ func (h *Header) Accept(c *gin.Context, u *user.User) (start bool, err error) {
 	}
 
 	h.AddUser(u)
-	log.Debugf("h: %#v", h)
+	Debugf("h: %#v", h)
 	if len(h.UserIDS) == h.NumPlayers {
 		return true, nil
 	}
 	return false, nil
 }
 
-func (h *Header) validateAccept(c *gin.Context, u *user.User) error {
+func (h *Header) validateAccept(c *gin.Context, u *User) error {
 	switch {
 	case len(h.UserIDS) >= h.NumPlayers:
 		return NewVError("Game already has the maximum number of players.")
@@ -79,7 +73,7 @@ func (h *Header) validateAccept(c *gin.Context, u *user.User) error {
 }
 
 // Returns (true, nil) if game should be started
-func (h *Header) AcceptWith(u *user.User, pwd []byte) (bool, error) {
+func (h *Header) AcceptWith(u *User, pwd []byte) (bool, error) {
 	err := h.validateAcceptWith(u, pwd)
 	if err != nil {
 		return false, err
@@ -92,8 +86,8 @@ func (h *Header) AcceptWith(u *user.User, pwd []byte) (bool, error) {
 	return false, nil
 }
 
-func (h *Header) validateAcceptWith(u *user.User, pwd []byte) error {
-	log.Debugf("PasswordHash: %v", h.PasswordHash)
+func (h *Header) validateAcceptWith(u *User, pwd []byte) error {
+	Debugf("PasswordHash: %v", h.PasswordHash)
 	switch {
 	case len(h.UserIDS) >= int(h.NumPlayers):
 		return fmt.Errorf("game already has the maximum number of players: %w", ErrValidation)
@@ -102,7 +96,7 @@ func (h *Header) validateAcceptWith(u *user.User, pwd []byte) error {
 	case len(h.PasswordHash) != 0:
 		err := bcrypt.CompareHashAndPassword(h.PasswordHash, pwd)
 		if err != nil {
-			log.Warningf(err.Error())
+			Warningf(err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
 				u.Name, h.Title, ErrValidation)
 		}
@@ -112,7 +106,7 @@ func (h *Header) validateAcceptWith(u *user.User, pwd []byte) error {
 	}
 }
 
-func (h *Header) Drop(u *user.User) (err error) {
+func (h *Header) Drop(u *User) (err error) {
 	if err = h.validateDrop(u); err != nil {
 		return
 	}
@@ -121,7 +115,7 @@ func (h *Header) Drop(u *user.User) (err error) {
 	return
 }
 
-func (h *Header) validateDrop(u *user.User) (err error) {
+func (h *Header) validateDrop(u *User) (err error) {
 	switch {
 	case h.Status != Recruiting:
 		err = NewVError("Game is no longer recruiting, thus %s can't drop.", u.Name)

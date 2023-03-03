@@ -15,8 +15,8 @@ package sn
 // type notifications map[int64]infs
 
 // func (client Client) DailyNotifications(c *gin.Context) {
-// 	client.Log.Debugf("Entering")
-// 	defer client.Log.Debugf("Exiting")
+// 	client.Log.Debugf(msgEnter)
+// 	defer client.Log.Debugf(msgExit)
 //
 // 	gs := GamersFrom(c)
 //

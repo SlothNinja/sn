@@ -11,8 +11,8 @@ const (
 // }
 
 // func (client *Client) getFiltered(c *gin.Context, status Status, sid, start, length string, t Type) (Gamers, int64, error) {
-// 	client.Log.Debugf("Entering")
-// 	defer client.Log.Debugf("Exiting")
+// 	client.Log.Debugf(msgEnter)
+// 	defer client.Log.Debugf(msgExit)
 //
 // 	q := getAllQuery(c).
 // 		KeysOnly()
@@ -91,8 +91,8 @@ const (
 
 // func (client Client) GetFiltered(t Type) gin.HandlerFunc {
 // 	return func(c *gin.Context) {
-// 		client.Log.Debugf("Entering")
-// 		defer client.Log.Debugf("Exiting")
+// 		client.Log.Debugf(msgEnter)
+// 		defer client.Log.Debugf(msgExit)
 //
 // 		status := ToStatus(c.Param("status"))
 // 		gs, cnt, err := client.getFiltered(c, status, c.Param("uid"), c.PostForm("start"), c.PostForm("length"), t)
@@ -107,8 +107,8 @@ const (
 // }
 //
 // func (client Client) GetRunning(c *gin.Context) {
-// 	client.Log.Debugf("Entering")
-// 	defer client.Log.Debugf("Exiting")
+// 	client.Log.Debugf(msgEnter)
+// 	defer client.Log.Debugf(msgExit)
 //
 // 	gs, cnt, err := client.getFiltered(c, c.Param("status"), "", "", "", All)
 //

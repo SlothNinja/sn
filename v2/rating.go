@@ -10,10 +10,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/client"
 	"github.com/SlothNinja/glicko"
-	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/iterator"
 
@@ -22,12 +19,12 @@ import (
 )
 
 type RatingClient struct {
-	*client.Client
-	User    *user.Client
+	*Client
+	User    *UserClient
 	Contest *ContestClient
 }
 
-func NewRatingClient(snClient *client.Client, userClient *user.Client, prefix string) *RatingClient {
+func NewRatingClient(snClient *Client, userClient *UserClient, prefix string) *RatingClient {
 	client := &RatingClient{
 		Client:  snClient,
 		User:    userClient,
@@ -174,15 +171,15 @@ const (
 	crKind = "CurrentRating"
 )
 
-func singleError(e error) error {
-	if e == nil {
-		return e
-	}
-	if me, ok := e.(datastore.MultiError); ok {
-		return me[0]
-	}
-	return e
-}
+// func singleError(e error) error {
+// 	if e == nil {
+// 		return e
+// 	}
+// 	if me, ok := e.(datastore.MultiError); ok {
+// 		return me[0]
+// 	}
+// 	return e
+// }
 
 // Get Current Rating for Type and user associated with uKey
 func (client *RatingClient) Get(c *gin.Context, uKey *datastore.Key, t Type) (*CurrentRating, error) {
@@ -258,7 +255,7 @@ func (client *RatingClient) GetAll(c *gin.Context, uKey *datastore.Key) (Current
 
 func (client *RatingClient) GetFor(c *gin.Context, t Type) (CurrentRatings, error) {
 	q := datastore.NewQuery(crKind).
-		Ancestor(user.RootKey()).
+		Ancestor(UserRootKey()).
 		FilterField("Type", "=", string(t)).
 		Order("-Low")
 
@@ -282,9 +279,6 @@ func (rs CurrentRatings) Projected(c *gin.Context, cm ContestMap) (CurrentRating
 }
 
 func (r *CurrentRating) Projected(cs []*Contest) (*CurrentRating, error) {
-	log.Debugf(msgEnter)
-	defer log.Debugf(msgExit)
-
 	l := len(cs)
 	if l == 0 && r.generated {
 		return r, nil
@@ -327,7 +321,7 @@ func (client *RatingClient) RatingsIndex(c *gin.Context) {
 }
 
 func getAllCurrentRatingsQuery(c *gin.Context) *datastore.Query {
-	return datastore.NewQuery(crKind).Ancestor(user.RootKey())
+	return datastore.NewQuery(crKind).Ancestor(UserRootKey())
 }
 
 func (client *RatingClient) getCurrentRatingsFiltered(c *gin.Context, t Type, leader bool, offset, limit int32) (CurrentRatings, int64, error) {
@@ -361,7 +355,7 @@ func (client *RatingClient) getCurrentRatingsFiltered(c *gin.Context, t Type, le
 	return rs, cnt, err
 }
 
-func (client *RatingClient) getUsers(c *gin.Context, rs CurrentRatings) (user.Users, error) {
+func (client *RatingClient) getUsers(c *gin.Context, rs CurrentRatings) (Users, error) {
 	client.Log.Debugf(msgEnter)
 	defer client.Log.Debugf(msgExit)
 
@@ -444,11 +438,11 @@ func (client *RatingClient) GetProjectedWith(c *gin.Context, ukey *datastore.Key
 	return client.projected(c, ukey, t, cs...)
 }
 
-func (client *RatingClient) For(c *gin.Context, u *user.User, t Type) (*CurrentRating, error) {
+func (client *RatingClient) For(c *gin.Context, u *User, t Type) (*CurrentRating, error) {
 	return client.Get(c, u.Key, t)
 }
 
-func (client *RatingClient) MultiFor(c *gin.Context, u *user.User) (CurrentRatings, error) {
+func (client *RatingClient) MultiFor(c *gin.Context, u *User) (CurrentRatings, error) {
 	return client.GetAll(c, u.Key)
 }
 
@@ -470,7 +464,7 @@ func (client *RatingClient) Update(c *gin.Context) {
 	locationID := client.getLocationID()
 	queueID := "default"
 
-	q := user.AllQuery(c).
+	q := AllUserQuery(c).
 		KeysOnly()
 	it := client.User.DS.Run(c, q)
 
@@ -742,10 +736,7 @@ func (r *CurrentRating) String() string {
 	return fmt.Sprintf("%.f (%.f : %.f)", r.Low, r.R, r.RD)
 }
 
-func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCombinedRatingsIndex, err error) {
-	log.Debugf(msgEnter)
-	defer log.Debugf(msgExit)
-
+func singleUser(c *gin.Context, u *User, rs, ps CurrentRatings) (table *jCombinedRatingsIndex, err error) {
 	table = new(jCombinedRatingsIndex)
 	l1, l2 := len(rs), len(ps)
 	if l1 != l2 {
@@ -757,7 +748,7 @@ func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCo
 	for i, r := range rs {
 		if p := ps[i]; !p.generated {
 			table.Data = append(table.Data, &jCombined{
-				Gravatar:  user.Gravatar(u, gravSize),
+				Gravatar:  Gravatar(u, gravSize),
 				Name:      u.Link(),
 				Type:      template.HTML(r.Type.String()),
 				Current:   template.HTML(r.String()),
@@ -768,7 +759,7 @@ func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCo
 
 	var draw int
 	if draw, err = strconv.Atoi(c.PostForm("draw")); err != nil {
-		log.Errorf("strconv.Atoi error: %v", err)
+		Errorf("strconv.Atoi error: %v", err)
 		return
 	}
 
@@ -777,7 +768,7 @@ func singleUser(c *gin.Context, u *user.User, rs, ps CurrentRatings) (table *jCo
 	table.RecordsFiltered = l2
 	return
 }
-func toCombined(c *gin.Context, us user.Users, rs, ps CurrentRatings, o int32, cnt int64) (*jCombinedRatingsIndex, error) {
+func toCombined(c *gin.Context, us Users, rs, ps CurrentRatings, o int32, cnt int64) (*jCombinedRatingsIndex, error) {
 	table := new(jCombinedRatingsIndex)
 	l1, l2 := len(rs), len(ps)
 	if l1 != l2 {
@@ -788,7 +779,7 @@ func toCombined(c *gin.Context, us user.Users, rs, ps CurrentRatings, o int32, c
 		if !r.generated {
 			table.Data = append(table.Data, &jCombined{
 				Rank:      i + int(o) + 1,
-				Gravatar:  user.Gravatar(us[i], gravSize),
+				Gravatar:  Gravatar(us[i], gravSize),
 				Name:      us[i].Link(),
 				Type:      template.HTML(r.Type.String()),
 				Current:   template.HTML(r.String()),
@@ -808,7 +799,7 @@ func toCombined(c *gin.Context, us user.Users, rs, ps CurrentRatings, o int32, c
 	return table, nil
 }
 
-func (client *RatingClient) IncreaseFor(c *gin.Context, u *user.User, t Type, cs []*Contest) (*CurrentRating, *CurrentRating, error) {
+func (client *RatingClient) IncreaseFor(c *gin.Context, u *User, t Type, cs []*Contest) (*CurrentRating, *CurrentRating, error) {
 	client.Log.Debugf(msgEnter)
 	defer client.Log.Debugf(msgExit)
 

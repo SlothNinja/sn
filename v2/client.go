@@ -2,9 +2,9 @@ package sn
 
 import (
 	"context"
+	"fmt"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/log"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/option"
@@ -14,7 +14,7 @@ import (
 
 type Client struct {
 	DS     *datastore.Client
-	Log    *log.Logger
+	Log    *Logger
 	Cache  *cache.Cache
 	Router *gin.Engine
 }
@@ -23,22 +23,27 @@ type Options struct {
 	Prefix    string
 	ProjectID string
 	DSURL     string
-	Logger    *log.Logger
+	Logger    *Logger
 	Cache     *cache.Cache
 	Router    *gin.Engine
 }
 
 func NewClient(ctx context.Context, opt Options) *Client {
 	opt.Logger.Debugf(msgEnter)
-	defer opt.Logger.Debugf(msgExit)
+	defer opt.Logger.Debugf(msgEnter)
 
 	if IsProduction() {
 		opt.Logger.Debugf("production")
 		dsClient, err := datastore.NewClient(ctx, opt.ProjectID)
 		if err != nil {
-			opt.Logger.Panicf("unable to connect to user database: %w", err)
+			panic(fmt.Errorf("unable to connect to user database: %w", err))
 		}
-		return &Client{DS: dsClient, Log: opt.Logger, Cache: opt.Cache, Router: opt.Router}
+		return &Client{
+			DS:     dsClient,
+			Log:    opt.Logger,
+			Cache:  opt.Cache,
+			Router: opt.Router,
+		}
 	}
 	opt.Logger.Debugf("development")
 	dsClient, err := datastore.NewClient(
@@ -50,9 +55,14 @@ func NewClient(ctx context.Context, opt Options) *Client {
 		option.WithGRPCConnectionPool(50),
 	)
 	if err != nil {
-		opt.Logger.Panicf("unable to connect to user database: %w", err)
+		panic(fmt.Errorf("unable to connect to user database: %w", err))
 	}
-	return &Client{DS: dsClient, Log: opt.Logger, Cache: opt.Cache, Router: opt.Router}
+	return &Client{
+		DS:     dsClient,
+		Log:    opt.Logger,
+		Cache:  opt.Cache,
+		Router: opt.Router,
+	}
 }
 
 func (cl *Client) Close() error {

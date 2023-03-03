@@ -2,7 +2,7 @@ package sn
 
 import (
 	"context"
-	log2 "log"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -10,8 +10,6 @@ import (
 	"cloud.google.com/go/datastore"
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/messaging"
-	"github.com/SlothNinja/client"
-	"github.com/SlothNinja/log"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/option"
 )
@@ -19,11 +17,11 @@ import (
 const subscriptionKind = "Subscription"
 
 type SubscriptionClient struct {
-	*client.Client
+	*Client
 	Messaging *messaging.Client
 }
 
-func NewSubscriptionClient(ctx context.Context, snClient *client.Client) *SubscriptionClient {
+func NewSubscriptionClient(ctx context.Context, snClient *Client) *SubscriptionClient {
 	return &SubscriptionClient{
 		Client:    snClient,
 		Messaging: newMsgClient(ctx),
@@ -236,10 +234,10 @@ func (cl *SubscriptionClient) UnsubscribeHandler(c *gin.Context) {
 		return
 	}
 
-	log.Debugf("original s: %+v", s)
+	Debugf("original s: %+v", s)
 	changed := s.Unsubscribe(token)
 	if changed {
-		log.Debugf("changed s: %+v", s)
+		Debugf("changed s: %+v", s)
 		_, err := cl.Put(c, s)
 		if err != nil {
 			JErr(c, err)
@@ -254,20 +252,20 @@ const fbCreds = "FB_CREDS"
 
 func newMsgClient(ctx context.Context) *messaging.Client {
 	if IsProduction() {
-		log.Debugf("production")
+		Debugf("production")
 		app, err := firebase.NewApp(ctx, nil)
 		if err != nil {
-			log2.Panicf("unable to create messaging client: %v", err)
+			log.Panicf("unable to create messaging client: %v", err)
 			return nil
 		}
 		cl, err := app.Messaging(ctx)
 		if err != nil {
-			log2.Panicf("unable to create messaging client: %v", err)
+			log.Panicf("unable to create messaging client: %v", err)
 			return nil
 		}
 		return cl
 	}
-	log.Debugf("development")
+	Debugf("development")
 	app, err := firebase.NewApp(
 		ctx,
 		nil,
@@ -275,12 +273,12 @@ func newMsgClient(ctx context.Context) *messaging.Client {
 		option.WithCredentialsFile(os.Getenv(fbCreds)),
 	)
 	if err != nil {
-		log2.Panicf("unable to create messaging client: %v", err)
+		log.Panicf("unable to create messaging client: %v", err)
 		return nil
 	}
 	cl, err := app.Messaging(ctx)
 	if err != nil {
-		log2.Panicf("unable to create messaging client: %v", err)
+		log.Panicf("unable to create messaging client: %v", err)
 		return nil
 	}
 	return cl

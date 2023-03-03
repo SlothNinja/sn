@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/SlothNinja/log"
 	"github.com/mailjet/mailjet-apiv3-go"
 )
 
@@ -13,8 +12,8 @@ func getMJKeys() (string, string) {
 }
 
 func SendMessages(c context.Context, msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
-	log.Debugf("Entering")
-	defer log.Debugf("Entering")
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	pub, priv := getMJKeys()
 	mailjetClient := mailjet.NewMailjetClient(pub, priv)
@@ -23,7 +22,7 @@ func SendMessages(c context.Context, msgInfo ...mailjet.InfoMessagesV31) (*mailj
 		return mailjetClient.SendMailV31(&msgs)
 	}
 	for _, msg := range msgInfo {
-		log.Debugf("sent message: %#v", msg)
+		Debugf("sent message: %#v", msg)
 	}
 	return nil, nil
 }

@@ -9,9 +9,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/client"
-	"github.com/SlothNinja/log"
-	"github.com/SlothNinja/user"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,7 +22,7 @@ type Message struct {
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
-func NewMessage(u *user.User, text string) *Message {
+func NewMessage(u *User, text string) *Message {
 	t := time.Now()
 	return &Message{
 		Text:             text,
@@ -52,9 +49,6 @@ type MLog struct {
 }
 
 func (ml *MLog) Load(ps []datastore.Property) error {
-	log.Debugf(msgEnter)
-	defer log.Debugf(msgExit)
-
 	err := datastore.LoadStruct(ml, ps)
 	if err != nil {
 		return err
@@ -85,9 +79,6 @@ func (ml *MLog) Load(ps []datastore.Property) error {
 }
 
 func (ml *MLog) Save() ([]datastore.Property, error) {
-	log.Debugf(msgEnter)
-	defer log.Debugf(msgExit)
-
 	obj := struct {
 		Messages []*Message    `json:"messages"`
 		Read     map[int64]int `json:"read"`
@@ -107,13 +98,13 @@ func (ml *MLog) LoadKey(k *datastore.Key) error {
 }
 
 type MLogClient struct {
-	*client.Client
-	User *user.Client
+	*Client
+	User *UserClient
 }
 
-func NewMLogClient(snClient *client.Client, userClient *user.Client) *MLogClient {
+func NewMLogClient(client *Client, userClient *UserClient) *MLogClient {
 	return &MLogClient{
-		Client: snClient,
+		Client: client,
 		User:   userClient,
 	}
 }
@@ -131,7 +122,7 @@ const (
 	// mlKey    = "MessageLog"
 )
 
-func (ml *MLog) AddMessage(u *user.User, text string) *Message {
+func (ml *MLog) AddMessage(u *User, text string) *Message {
 	m := NewMessage(u, text)
 	ml.Messages = append(ml.Messages, m)
 	if ml.Read == nil {
@@ -189,7 +180,7 @@ func (cl *MLogClient) Get(c *gin.Context, id int64) (*MLog, error) {
 	return cl.dsGet(c, id)
 }
 
-func (cl *MLogClient) UpdateRead(c *gin.Context, ml *MLog, u *user.User) (*MLog, error) {
+func (cl *MLogClient) UpdateRead(c *gin.Context, ml *MLog, u *User) (*MLog, error) {
 	ml.Read[u.ID()] = len(ml.Messages)
 	_, err := cl.Put(c, ml.Key.ID, ml)
 	if err != nil {
@@ -198,7 +189,7 @@ func (cl *MLogClient) UpdateRead(c *gin.Context, ml *MLog, u *user.User) (*MLog,
 	return ml, nil
 }
 
-func (cl *MLogClient) Unread(c *gin.Context, id int64, u *user.User) (int, error) {
+func (cl *MLogClient) Unread(c *gin.Context, id int64, u *User) (int, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -294,8 +285,8 @@ func (cl *MLogClient) AddMessageHandler(c *gin.Context) {
 	}
 
 	obj := struct {
-		Message string     `json:"message"`
-		Creator *user.User `json:"creator"`
+		Message string `json:"message"`
+		Creator *User  `json:"creator"`
 	}{}
 
 	err = c.ShouldBind(&obj)

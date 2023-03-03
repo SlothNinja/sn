@@ -1,0 +1,240 @@
+package sn
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"cloud.google.com/go/datastore"
+	"github.com/gin-gonic/gin"
+)
+
+const (
+	sKind    = "Stats"
+	sName    = "root"
+	statsKey = "Stats"
+)
+
+var (
+	ErrMissingUser  = errors.New("missing user")
+	ErrInvalidCache = errors.New("invalid cache value")
+)
+
+func StatsFrom(c *gin.Context) (s *Stats) {
+	s, _ = c.Value(statsKey).(*Stats)
+	return
+}
+
+func StatsWith(c *gin.Context, s *Stats) {
+	c.Set(statsKey, s)
+}
+
+type Stats struct {
+	Key       *datastore.Key `datastore:"__key__"`
+	Turns     int
+	Duration  time.Duration
+	Longest   time.Duration
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (s *Stats) Load(ps []datastore.Property) error {
+	return datastore.LoadStruct(s, ps)
+}
+
+func (s *Stats) Save() ([]datastore.Property, error) {
+	t := time.Now()
+	if s.CreatedAt.IsZero() {
+		s.CreatedAt = t
+	}
+	s.UpdatedAt = t
+	return datastore.SaveStruct(s)
+}
+
+func (s *Stats) LoadKey(k *datastore.Key) error {
+	s.Key = k
+	return nil
+}
+
+type MultiStats []*Stats
+
+func (s *Stats) Average() time.Duration {
+	if s.Turns == 0 {
+		return 0
+	}
+	return (s.Duration / time.Duration(s.Turns))
+}
+
+// last is time associated with last move in game.
+func (s *Stats) Update(c *gin.Context, last time.Time) {
+	StatsWith(c, s.update(last))
+}
+
+func (s *Stats) GetUpdate(c *gin.Context, last time.Time) *Stats {
+	return s.update(last)
+}
+
+func (s *Stats) update(last time.Time) *Stats {
+	since := time.Since(last)
+
+	s.Turns += 1
+	s.Duration += since
+	if since > s.Longest {
+		s.Longest = s.Duration
+	}
+
+	return s
+}
+
+func (s *Stats) AverageString() string {
+	switch d := s.Average(); {
+	case d.Minutes() < 60:
+		return fmt.Sprintf("%.f minutes", d.Minutes())
+	case d.Hours() < 48:
+		return fmt.Sprintf("%.1f hours", d.Hours())
+	default:
+		return fmt.Sprintf("%.1f days", d.Hours()/24)
+	}
+}
+
+func (s *Stats) LongestString() string {
+	switch d := s.Longest; {
+	case d.Minutes() < 60:
+		return fmt.Sprintf("%.f minutes", d.Minutes())
+	case d.Hours() < 48:
+		return fmt.Sprintf("%.1f hours", d.Hours())
+	default:
+		return fmt.Sprintf("%.1f days", d.Hours()/24)
+	}
+}
+
+func (s *Stats) SinceLastString() string {
+	switch d := time.Since(time.Time(s.UpdatedAt)); {
+	case d.Minutes() < 60:
+		return fmt.Sprintf("%.f minutes", d.Minutes())
+	case d.Hours() < 48:
+		return fmt.Sprintf("%.1f hours", d.Hours())
+	default:
+		return fmt.Sprintf("%.1f days", d.Hours()/24)
+	}
+}
+
+func NewStatsFor(u *User) *Stats {
+	return &Stats{Key: statsKeyFor(u)}
+}
+
+func statsKeyFor(u *User) *datastore.Key {
+	return datastore.NameKey(sKind, sName, u.Key)
+}
+
+func singleError(err error) error {
+	if err == nil {
+		return err
+	}
+	if me, ok := err.(datastore.MultiError); ok {
+		return me[0]
+	}
+	return err
+}
+
+func (client *UserClient) StatsFor(c *gin.Context, u *User) (*Stats, error) {
+	client.Log.Debugf(msgEnter)
+	defer client.Log.Debugf(msgEnter)
+
+	s, err := client.mcGetStatsFor(c, u)
+	if err == nil {
+		return s, nil
+	}
+
+	s, err = client.dsGetStatsFor(c, u)
+	if err == datastore.ErrNoSuchEntity {
+		return s, nil
+	}
+	return s, err
+}
+
+func (client *UserClient) StatsUpdate(c *gin.Context, s *Stats, last time.Time) (*Stats, error) {
+	client.Log.Debugf(msgEnter)
+	defer client.Log.Debugf(msgEnter)
+
+	s.update(last)
+
+	_, err := client.DS.Put(c, s.Key, s)
+	if err != nil {
+		return nil, err
+	}
+
+	client.Cache.SetDefault(s.Key.Encode(), s)
+	return s, nil
+}
+
+func (client *UserClient) mcGetStatsFor(c *gin.Context, u *User) (*Stats, error) {
+	client.Log.Debugf(msgEnter)
+	defer client.Log.Debugf(msgEnter)
+
+	if u == nil {
+		return nil, ErrMissingUser
+	}
+
+	k := statsKeyFor(u)
+	item, found := client.Cache.Get(k.Encode())
+	if !found {
+		return nil, ErrNotFound
+	}
+
+	s, ok := item.(*Stats)
+	if !ok {
+		return nil, ErrInvalidCache
+	}
+
+	return s, nil
+}
+
+func (client *UserClient) dsGetStatsFor(c *gin.Context, u *User) (*Stats, error) {
+	client.Log.Debugf(msgEnter)
+	defer client.Log.Debugf(msgEnter)
+
+	if u == nil {
+		return nil, ErrMissingUser
+	}
+
+	s := NewStatsFor(u)
+	err := client.DS.Get(c, s.Key, s)
+	if err != nil {
+		return s, err
+	}
+
+	client.Cache.SetDefault(s.Key.Encode(), s)
+	return s, nil
+}
+
+func (client *UserClient) StatsFetch(c *gin.Context) {
+	client.Log.Debugf(msgEnter)
+	defer client.Log.Debugf(msgExit)
+
+	if From(c) != nil {
+		return
+	}
+
+	cu, err := client.Current(c)
+	if err != nil {
+		client.Log.Debugf(err.Error())
+	}
+	client.Log.Debugf("u: %#v", cu)
+	if cu == nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("missing user."))
+		return
+	}
+
+	s, err := client.StatsFor(c, cu)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	StatsWith(c, s)
+}
+
+func StatsFetched(c *gin.Context) *Stats {
+	return StatsFrom(c)
+}

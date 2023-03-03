@@ -43,13 +43,13 @@ func VersionID() string {
 
 // func (client *Client) Index(prefix string) gin.HandlerFunc {
 // 	return func(c *gin.Context) {
-// 		client.Log.Debugf("Entering")
-// 		defer client.Log.Debugf("Exiting")
+// 		cl.Debugf(msgEnter)
+// 		defer cl.Debugf(msgExit)
 //
 // 		gs := GamersFrom(c)
 // 		cu, err := client.User.Current(c)
 // 		if err != nil {
-// 			client.Log.Debugf(err.Error())
+// 			cl.Debugf(err.Error())
 // 		}
 //
 // 		status := StatusFrom(c)
@@ -74,8 +74,8 @@ func VersionID() string {
 // }
 
 // func (client *Client) JIndex(c *gin.Context) {
-// 	client.Log.Debugf("Entering")
-// 	defer client.Log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	options := struct {
 // 		ItemsPerPage int    `json:"itemsPerPage"`
@@ -88,7 +88,7 @@ func VersionID() string {
 // 		return
 // 	}
 //
-// 	client.Log.Debugf("options: %#v", options)
+// 	cl.Debugf("options: %#v", options)
 //
 // 	cu, err := client.User.Current(c)
 // 	if err != nil {
@@ -114,7 +114,7 @@ func VersionID() string {
 // 		return
 // 	}
 //
-// 	client.Log.Debugf("cnt: %v", cnt)
+// 	cl.Debugf("cnt: %v", cnt)
 // 	items := options.ItemsPerPage
 // 	if options.ItemsPerPage == -1 {
 // 		items = cnt
@@ -252,8 +252,8 @@ type Action struct {
 // }
 
 // func (client Client) JSONIndexAction(c *gin.Context) {
-// 	client.Log.Debugf("Entering")
-// 	defer client.Log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	cu, err := client.User.Current(c)
 // 	if err != nil {
@@ -270,8 +270,8 @@ type Action struct {
 // }
 
 // func toGameTable(c *gin.Context, cu *user.User, cnt int64) (*jGamesIndex, error) {
-// 	log.Debugf("Entering")
-// 	defer log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	gs := GamersFrom(c)
 // 	table := new(jGamesIndex)
@@ -308,8 +308,8 @@ type Action struct {
 // }
 //
 // func ToGameTable(c *gin.Context, gs []Gamer, cnt int64, cu *user.User) (*jGamesIndex, error) {
-// 	log.Debugf("Entering")
-// 	defer log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	table := new(jGamesIndex)
 // 	l := len(gs)
@@ -361,8 +361,8 @@ type Action struct {
 // }
 
 // func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
-// 	log.Debugf("Entering")
-// 	defer log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	h := g.GetHeader()
 // 	switch h.Status {
@@ -430,8 +430,8 @@ type GOptions struct {
 }
 
 func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, int, datastore.Cursor, error) {
-	cl.Log.Debugf("Entering")
-	defer cl.Log.Debugf("Exiting")
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
 
 	q := datastore.
 		NewQuery(opt.Kind).
@@ -575,8 +575,8 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 }
 
 // func (cl *Client) GamesIndex(c *gin.Context) {
-// 	cl.Log.Debugf("Entering")
-// 	defer cl.Log.Debugf("Exiting")
+// 	cl.Debugf(msgEnter)
+// 	defer cl.Debugf(msgExit)
 //
 // 	obj := struct {
 // 		Options struct {
@@ -594,15 +594,15 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Log.Debugf("obj: %#v", obj)
+// 	cl.Debugf("obj: %#v", obj)
 //
 // 	cu, err := cl.User.Current(c)
 // 	if err != nil {
 // 		sn.JErr(c, err)
 // 		return
 // 	}
-// 	cl.Log.Debugf("cu: %#v", cu)
-// 	cl.Log.Debugf("err: %#v", err)
+// 	cl.Debugf("cu: %#v", cu)
+// 	cl.Debugf("err: %#v", err)
 //
 // 	forward, err := datastore.DecodeCursor(obj.Forward)
 // 	if err != nil {
@@ -610,7 +610,7 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Log.Debugf("forward: %#v", forward)
+// 	cl.Debugf("forward: %#v", forward)
 // 	status := ToStatus[obj.Status]
 // 	t := gType.ToType[obj.Type]
 // 	q := datastore.
@@ -632,7 +632,7 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Log.Debugf("cnt: %v", cnt)
+// 	cl.Debugf("cnt: %v", cnt)
 // 	items := obj.Options.ItemsPerPage
 // 	if obj.Options.ItemsPerPage == -1 {
 // 		items = cnt
@@ -659,8 +659,8 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Log.Debugf("forward: %#v", forward)
-// 	cl.Log.Debugf("forward.String: %#v", forward.String())
+// 	cl.Debugf("forward: %#v", forward)
+// 	cl.Debugf("forward.String: %#v", forward.String())
 // 	c.JSON(http.StatusOK, gin.H{
 // 		"gheaders":   es,
 // 		"totalItems": cnt,

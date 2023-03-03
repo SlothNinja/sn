@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/SlothNinja/client"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,16 +13,16 @@ const (
 )
 
 var (
-	ErrMissingKey   = errors.New("missing key")
-	ErrNotFound     = errors.New("not found")
-	ErrInvalidCache = errors.New("invalid cached value")
+	// ErrMissingKey = errors.New("missing key")
+	ErrNotFound = errors.New("not found")
+	// ErrInvalidCache = errors.New("invalid cached value")
 )
 
 type ContestClient struct {
-	*client.Client
+	*Client
 }
 
-func NewContestClient(snClient *client.Client) *ContestClient {
+func NewContestClient(snClient *Client) *ContestClient {
 	return &ContestClient{snClient}
 }
 
