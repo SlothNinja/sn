@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	gob.Register(new(sessionToken))
+	gob.RegisterName("*user.sessionToken", new(sessionToken))
 }
 
 const (
