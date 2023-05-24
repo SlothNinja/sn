@@ -50,15 +50,15 @@ func NewClient[G Game, I Invitation](ctx context.Context, opt Options[G, I]) Cli
 		if err != nil {
 			panic(fmt.Errorf("unable to connect to firestore database: %w", err))
 		}
-		client := Client{
+		cl := Client{
 			User:   dsClient,
 			FS:     fsClient,
 			Log:    opt.Logger,
 			Cache:  opt.Cache,
 			Router: opt.Router,
 		}
-		client.NewStore(ctx)
-		return client
+		cl.NewStore(ctx)
+		return addRoutes(cl, opt.Prefix, opt.Game, opt.Invitation)
 	}
 	opt.Logger.Debugf("development")
 	dsClient, err := datastore.NewClient(
