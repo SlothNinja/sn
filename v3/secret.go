@@ -27,17 +27,18 @@ type Secret struct {
 	Key       *datastore.Key `datastore:"__key__" json:"-"`
 }
 
-// CookieClient for generating secure cookie store
-type CookieClient struct {
-	*Client
-}
-
-// NewCookieClient creates a client for generating a secured cookie store
-func NewCookieClient(snClient *Client) *CookieClient {
-	return &CookieClient{snClient}
-}
-
-func (cl Client) getSecrets(c context.Context) (*Secret, error) {
+// // CookieClient for generating secure cookie store
+//
+//	type CookieClient struct {
+//		*Client
+//	}
+//
+// // NewCookieClient creates a client for generating a secured cookie store
+//
+//	func NewCookieClient(snClient *Client) *CookieClient {
+//		return &CookieClient{snClient}
+//	}
+func (cl Client[G, I]) getSecrets(c context.Context) (*Secret, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -56,7 +57,7 @@ func (cl Client) getSecrets(c context.Context) (*Secret, error) {
 }
 
 // mcGet attempts to pull secret from cache
-func (cl Client) mcGetSecrets() (*Secret, bool) {
+func (cl Client[G, I]) mcGetSecrets() (*Secret, bool) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -76,7 +77,7 @@ func (cl Client) mcGetSecrets() (*Secret, bool) {
 }
 
 // dsGet attempt to pull secret from datastore
-func (cl Client) dsGetSecrets(c context.Context) (*Secret, error) {
+func (cl Client[G, I]) dsGetSecrets(c context.Context) (*Secret, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -85,7 +86,7 @@ func (cl Client) dsGetSecrets(c context.Context) (*Secret, error) {
 	return s, err
 }
 
-func (cl Client) updateSecrets(c context.Context) (*Secret, error) {
+func (cl Client[G, I]) updateSecrets(c context.Context) (*Secret, error) {
 	s, err := GenSecrets()
 	if err != nil {
 		return nil, err
@@ -135,7 +136,7 @@ func (s *Secret) LoadKey(k *datastore.Key) error {
 type Store cookie.Store
 
 // NewStore generates a new secure cookie store
-func (cl Client) NewStore(ctx context.Context) {
+func (cl Client[G, I]) NewStore(ctx context.Context) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 

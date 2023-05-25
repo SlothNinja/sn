@@ -14,17 +14,17 @@ import (
 
 const subscriptionKind = "Subscription"
 
-type SubscriptionClient struct {
-	*Client
-	Messaging *messaging.Client
-}
-
-func NewSubscriptionClient(ctx context.Context, snClient *Client) *SubscriptionClient {
-	return &SubscriptionClient{
-		Client:    snClient,
-		Messaging: newMsgClient(ctx),
-	}
-}
+// type SubscriptionClient struct {
+// 	*Client
+// 	Messaging *messaging.Client
+// }
+//
+// func NewSubscriptionClient(ctx context.Context, snClient *Client) *SubscriptionClient {
+// 	return &SubscriptionClient{
+// 		Client:    snClient,
+// 		Messaging: newMsgClient(ctx),
+// 	}
+// }
 
 type Subscription struct {
 	Key       *datastore.Key `datastore:"__key__"`

@@ -18,60 +18,47 @@ const hashKind = "Hash"
 
 func updateTime() (t time.Time) { return }
 
-type Invitation interface {
-	FromForm(*gin.Context, User) ([]byte, error)
+type Invitation[G Game[G], I any] interface {
+	FromForm(*gin.Context, User) (I, []byte, error)
 	Head() *Header
-	Default()
-	Start() (Game, PID, error)
+	Default() I
+	Start() (G, PID, error)
 }
 
-type Tester[P any] struct {
-	A P
-}
-
-func (t Tester[P]) GetA() P {
-	return t.A
-}
-
-type tester struct {
-	Tester[int]
-}
-
-func (t tester) test() int {
-	return t.GetA()
-}
-
-func (cl Client) InvitationDocRef(id string) *firestore.DocumentRef {
+func (cl Client[G, I]) InvitationDocRef(id string) *firestore.DocumentRef {
 	return cl.InvitationCollectionRef().Doc(id)
 }
 
-func (cl Client) InvitationCollectionRef() *firestore.CollectionRef {
+func (cl Client[G, I]) InvitationCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(invitationKind)
 }
 
-func (cl Client) HashDocRef(id string) *firestore.DocumentRef {
+func (cl Client[G, I]) HashDocRef(id string) *firestore.DocumentRef {
 	return cl.InvitationDocRef(id).Collection(hashKind).Doc("hash")
 }
 
-func GetInvitation[T Invitation](ctx *gin.Context, cl Client, inv T) error {
+func (cl Client[G, I]) GetInvitation(ctx *gin.Context) (I, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
+
+	var inv I
+	inv = inv.Default()
 
 	id := getID(ctx)
 	snap, err := cl.InvitationDocRef(id).Get(ctx)
 	if err != nil {
-		return err
+		return inv, err
 	}
 
 	if err = snap.DataTo(inv); err != nil {
-		return err
+		return inv, err
 	}
 
 	inv.Head().ID = id
-	return nil
+	return inv, nil
 }
 
-func (cl Client) GetHash(ctx context.Context, id string) ([]byte, error) {
+func (cl Client[G, I]) GetHash(ctx context.Context, id string) ([]byte, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -92,13 +79,13 @@ func (cl Client) GetHash(ctx context.Context, id string) ([]byte, error) {
 	return hash, nil
 }
 
-func (cl Client) DeleteInvitation(ctx context.Context, id string) error {
+func (cl Client[G, I]) DeleteInvitation(ctx context.Context, id string) error {
 	return cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		return cl.DeleteInvitationIn(ctx, tx, id)
 	})
 }
 
-func (cl Client) DeleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
+func (cl Client[G, I]) DeleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
 	ref := cl.InvitationDocRef(id)
 	if err := tx.Delete(ref); err != nil {
 		return err
@@ -110,17 +97,17 @@ func (cl Client) DeleteInvitationIn(ctx context.Context, tx *firestore.Transacti
 	return nil
 }
 
-func NewInvitationHandler[I Invitation](cl Client, inv I) gin.HandlerFunc {
+func (cl Client[G, I]) NewInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		inv.Default()
-		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv})
+		var inv I
+		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv.Default()})
 	}
 }
 
-func CreateInvitationHandler[I Invitation](cl Client, inv I) gin.HandlerFunc {
+func (cl Client[G, I]) CreateInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -131,7 +118,8 @@ func CreateInvitationHandler[I Invitation](cl Client, inv I) gin.HandlerFunc {
 			return
 		}
 
-		hash, err := inv.FromForm(ctx, cu)
+		var inv I
+		inv, hash, err := inv.FromForm(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -154,15 +142,14 @@ func CreateInvitationHandler[I Invitation](cl Client, inv I) gin.HandlerFunc {
 
 		// capture title before resetting to defaults
 		title := inv.Head().Title
-		inv.Default()
 		ctx.JSON(http.StatusOK, gin.H{
-			"Invitation": inv,
+			"Invitation": inv.Default(),
 			"Message":    fmt.Sprintf("%s created game %q", cu.Name, title),
 		})
 	}
 }
 
-func AcceptHandler(cl Client, inv Invitation) gin.HandlerFunc {
+func (cl Client[G, I]) AcceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -173,7 +160,8 @@ func AcceptHandler(cl Client, inv Invitation) gin.HandlerFunc {
 			return
 		}
 
-		if err := GetInvitation(ctx, cl, inv); err != nil {
+		inv, err := cl.GetInvitation(ctx)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -223,7 +211,7 @@ func AcceptHandler(cl Client, inv Invitation) gin.HandlerFunc {
 		cl.Log.Debugf("g: %#v", g)
 
 		if err := cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := SaveGameIn(ctx, cl, tx, g, cu); err != nil {
+			if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
 				return err
 			}
 			return cl.DeleteInvitationIn(ctx, tx, inv.Head().ID)
@@ -251,12 +239,13 @@ func (h Header) StartGameMessage(pid PID) string {
 		h.Title, h.NameFor(pid))
 }
 
-func DropHandler(cl Client, inv Invitation) gin.HandlerFunc {
+func (cl Client[G, I]) DropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		if err := GetInvitation(ctx, cl, inv); err != nil {
+		inv, err := cl.GetInvitation(ctx)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -273,6 +262,7 @@ func DropHandler(cl Client, inv Invitation) gin.HandlerFunc {
 			return
 		}
 
+		Debugf("ID: %#v", inv.Head().ID)
 		if len(inv.Head().UserIDS) != 0 {
 			inv.Head().UpdatedAt = updateTime()
 			_, err = cl.InvitationDocRef(inv.Head().ID).Set(ctx, inv)
@@ -292,24 +282,24 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func Commit[G Game](ctx context.Context, cl Client, g G, cu User) error {
+func (cl Client[G, I]) Commit(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	g.Head().Undo.Commit()
-	return Save(ctx, cl, g, cu)
+	return cl.Save(ctx, g, cu)
 }
 
-func Save[G Game](ctx context.Context, cl Client, g G, u User) error {
+func (cl Client[G, I]) Save(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return SaveGameIn(ctx, cl, tx, g, u)
+		return cl.SaveGameIn(ctx, tx, g, u)
 	})
 }
 
-func SaveGameIn[G Game](ctx context.Context, cl Client, tx *firestore.Transaction, g G, cu User) error {
+func (cl Client[G, I]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -334,10 +324,10 @@ func SaveGameIn[G Game](ctx context.Context, cl Client, tx *firestore.Transactio
 	// 		return err
 	// 	}
 	// }
-	return ClearCached[G](ctx, cl, g, cu)
+	return cl.ClearCached(ctx, g, cu)
 }
 
-func ClearCached[G Game](ctx context.Context, cl Client, g G, cu User) error {
+func (cl Client[G, I]) ClearCached(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -383,12 +373,13 @@ type detail struct {
 	WP     float32
 }
 
-func DetailsHandler(cl Client, inv Invitation) gin.HandlerFunc {
+func (cl Client[G, I]) DetailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		if err := GetInvitation(ctx, cl, inv); err != nil {
+		inv, err := cl.GetInvitation(ctx)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}

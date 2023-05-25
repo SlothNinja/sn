@@ -3,6 +3,8 @@ package sn
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/firestore"
@@ -14,7 +16,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type Client struct {
+type Client[G Game[G], I Invitation[G, I]] struct {
 	FS     *firestore.Client
 	User   *datastore.Client
 	Log    *Logger
@@ -22,25 +24,23 @@ type Client struct {
 	Router *gin.Engine
 }
 
-type Options[G Game, I Invitation] struct {
+type Options struct {
 	ProjectID     string
 	UserProjectID string
 	UserDSURL     string
-	Logger        *Logger
-	Cache         *cache.Cache
-	Router        *gin.Engine
+	LoggerID      string
 	CorsAllow     []string
 	Prefix        string
-	Game          G
-	Invitation    I
 }
 
-func NewClient[G Game, I Invitation](ctx context.Context, opt Options[G, I]) Client {
-	opt.Logger.Debugf(msgEnter)
-	defer opt.Logger.Debugf(msgEnter)
-
+func NewClient[G Game[G], I Invitation[G, I]](ctx context.Context, opt Options) Client[G, I] {
+	lClient, err := NewLogClient(opt.ProjectID)
+	if err != nil {
+		log.Panicf("unable to create logging client: %v", err)
+	}
+	log := lClient.Logger(opt.LoggerID)
 	if IsProduction() {
-		opt.Logger.Debugf("production")
+		log.Debugf("production")
 		dsClient, err := datastore.NewClient(ctx, opt.UserProjectID)
 
 		if err != nil {
@@ -50,17 +50,17 @@ func NewClient[G Game, I Invitation](ctx context.Context, opt Options[G, I]) Cli
 		if err != nil {
 			panic(fmt.Errorf("unable to connect to firestore database: %w", err))
 		}
-		cl := Client{
+		cl := Client[G, I]{
 			User:   dsClient,
 			FS:     fsClient,
-			Log:    opt.Logger,
-			Cache:  opt.Cache,
-			Router: opt.Router,
+			Log:    log,
+			Cache:  cache.New(30*time.Minute, 10*time.Minute),
+			Router: gin.Default(),
 		}
 		cl.NewStore(ctx)
-		return addRoutes(cl, opt.Prefix, opt.Game, opt.Invitation)
+		return cl.addRoutes(opt.Prefix)
 	}
-	opt.Logger.Debugf("development")
+	log.Debugf("development")
 	dsClient, err := datastore.NewClient(
 		ctx,
 		opt.UserProjectID,
@@ -76,12 +76,12 @@ func NewClient[G Game, I Invitation](ctx context.Context, opt Options[G, I]) Cli
 	if err != nil {
 		panic(fmt.Errorf("unable to connect to firestore database: %w", err))
 	}
-	cl := Client{
+	cl := Client[G, I]{
 		User:   dsClient,
 		FS:     fsClient,
-		Log:    opt.Logger,
-		Cache:  opt.Cache,
-		Router: opt.Router,
+		Log:    log,
+		Cache:  cache.New(30*time.Minute, 10*time.Minute),
+		Router: gin.Default(),
 	}
 	cl.NewStore(ctx)
 	config := cors.DefaultConfig()
@@ -89,71 +89,71 @@ func NewClient[G Game, I Invitation](ctx context.Context, opt Options[G, I]) Cli
 	config.AllowCredentials = true
 	config.AllowWildcard = true
 	cl.Router.Use(cors.New(config))
-	return addRoutes(cl, opt.Prefix, opt.Game, opt.Invitation)
-}
-
-func (cl *Client) Close() error {
-	cl.FS.Close()
-	return cl.User.Close()
+	return cl.addRoutes(opt.Prefix)
 }
 
 // AddRoutes addes routing for game.
-func addRoutes[G Game, I Invitation](cl Client, prefix string, g G, inv I) Client {
+func (cl Client[G, I]) addRoutes(prefix string) Client[G, I] {
 	////////////////////////////////////////////
 	// Invitation Group
 	iGroup := cl.Router.Group(prefix + "/invitation")
 
 	// New
-	iGroup.GET("/new", NewInvitationHandler(cl, inv))
+	iGroup.GET("/new", cl.NewInvitationHandler())
 
-	// Create
-	iGroup.PUT("/new", CreateInvitationHandler(cl, inv))
+	// // Create
+	iGroup.PUT("/new", cl.CreateInvitationHandler())
 
-	// Drop
-	iGroup.PUT("/drop/:id", DropHandler(cl, inv))
+	// // Drop
+	iGroup.PUT("/drop/:id", cl.DropHandler())
 
-	// Accept
-	// inv.PUT("/accept/:id", cl.acceptHandler)
-	iGroup.PUT("/accept/:id", AcceptHandler(cl, inv))
+	// // Accept
+	// // inv.PUT("/accept/:id", cl.acceptHandler)
+	iGroup.PUT("/accept/:id", cl.AcceptHandler())
 
-	// Details
-	iGroup.GET("/details/:id", DetailsHandler(cl, inv))
+	// // Details
+	iGroup.GET("/details/:id", cl.DetailsHandler())
 
 	/////////////////////////////////////////////
 	// Game Group
 	gGroup := cl.Router.Group(prefix + "/game")
 
 	// Reset
-	gGroup.PUT("reset/:id", ResetHandler(cl, g))
+	gGroup.PUT("reset/:id", cl.ResetHandler())
 
 	// Undo
-	gGroup.PUT("undo/:id", UndoHandler(cl, g))
+	gGroup.PUT("undo/:id", cl.UndoHandler())
 
 	// Redo
-	gGroup.PUT("redo/:id", RedoHandler(cl, g))
+	gGroup.PUT("redo/:id", cl.RedoHandler())
 
 	// Rollback
-	gGroup.PUT("rollback/:id", RollbackHandler(cl, g))
+	gGroup.PUT("rollback/:id", cl.RollbackHandler())
 
 	// Rollforward
-	gGroup.PUT("rollforward/:id", RollforwardHandler(cl, g))
+	gGroup.PUT("rollforward/:id", cl.RollforwardHandler())
 
 	// login
-	cl.Router.GET(prefix+"/login", LoginHandler(cl))
+	cl.Router.GET(prefix+"/login", cl.LoginHandler())
 	//
 	// logout
-	cl.Router.GET(prefix+"/logout", LogoutHandler(cl))
+	cl.Router.GET(prefix+"/logout", cl.LogoutHandler())
 
-	// current user
-	cl.Router.GET(prefix+"/cu", CuHandler(cl))
-	// 	// Message Log
-	// 	msg := cl.Router.Group("mlog")
-	//
-	// 	// Get
-	// 	msg.GET("/:id", cl.mlogHandler)
-	//
-	// 	// Add
-	// 	msg.PUT("/:id/add", cl.mlogAddHandler)
-	//
+	// // current user
+	cl.Router.GET(prefix+"/cu", cl.CuHandler())
+	// // 	// Message Log
+	// // 	msg := cl.Router.Group("mlog")
+	// //
+	// // 	// Get
+	// // 	msg.GET("/:id", cl.mlogHandler)
+	// //
+	// // 	// Add
+	// // 	msg.PUT("/:id/add", cl.mlogAddHandler)
+	// //
 	return cl
+}
+
+func (cl Client[G, I]) Close() error {
+	cl.FS.Close()
+	return cl.User.Close()
 }

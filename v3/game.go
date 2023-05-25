@@ -21,37 +21,38 @@ const (
 	committedKind = "Committed"
 )
 
-type Game interface {
+type Game[G any] interface {
 	Head() *Header
 	IsCurrentPlayer(User) bool
-	Views() ([]UID, []Game)
+	Views() ([]UID, []G)
+	New() G
 }
 
-func (cl Client) GameDocRef(id string, rev int) *firestore.DocumentRef {
+func (cl Client[G, I]) GameDocRef(id string, rev int) *firestore.DocumentRef {
 	return cl.GameCollectionRef().Doc(fmt.Sprintf("%s-%d", id, rev))
 }
 
-func (cl Client) GameCollectionRef() *firestore.CollectionRef {
+func (cl Client[G, I]) GameCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(gameKind)
 }
 
-func (cl Client) CachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl Client[G, I]) CachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.CachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d", rev, uid))
 }
 
-func (cl Client) FullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl Client[G, I]) FullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.CachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d-0", rev, uid))
 }
 
-func (cl Client) CachedCollectionRef(id string) *firestore.CollectionRef {
+func (cl Client[G, I]) CachedCollectionRef(id string) *firestore.CollectionRef {
 	return cl.CommittedDocRef(id).Collection(cachedKind)
 }
 
-func (cl Client) CommittedDocRef(id string) *firestore.DocumentRef {
+func (cl Client[G, I]) CommittedDocRef(id string) *firestore.DocumentRef {
 	return cl.FS.Collection(committedKind).Doc(id)
 }
 
-func (cl Client) ViewDocRef(id string, uid UID) *firestore.DocumentRef {
+func (cl Client[G, I]) ViewDocRef(id string, uid UID) *firestore.DocumentRef {
 	return cl.CommittedDocRef(id).Collection(viewKind).Doc(fmt.Sprintf("%d", uid))
 }
 
@@ -181,7 +182,7 @@ const (
 	hParam  = "hid"
 )
 
-func ResetHandler[G Game](cl Client, g G) gin.HandlerFunc {
+func (cl Client[G, I]) ResetHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -192,12 +193,13 @@ func ResetHandler[G Game](cl Client, g G) gin.HandlerFunc {
 			return
 		}
 
-		if err := GetCommitted(ctx, cl, g); err != nil {
+		g, err := cl.GetCommitted(ctx)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		err = ClearCached(ctx, cl, g, cu)
+		err = cl.ClearCached(ctx, g, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -213,7 +215,7 @@ var NoUndo stackFunc = func(s *Stack) bool { return false }
 var Undo stackFunc = (*Stack).Undo
 var Redo stackFunc = (*Stack).Redo
 
-func UndoHandler[G Game](cl Client, g G) gin.HandlerFunc {
+func (cl Client[G, I]) UndoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -230,6 +232,7 @@ func UndoHandler[G Game](cl Client, g G) gin.HandlerFunc {
 			JErr(ctx, err)
 			return
 		}
+
 		var stack Stack
 		err = snap.DataTo(&stack)
 		if err != nil {
@@ -253,7 +256,7 @@ func UndoHandler[G Game](cl Client, g G) gin.HandlerFunc {
 	}
 }
 
-func RedoHandler[G Game](cl Client, g G) gin.HandlerFunc {
+func (cl Client[G, I]) RedoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -294,7 +297,7 @@ func RedoHandler[G Game](cl Client, g G) gin.HandlerFunc {
 	}
 }
 
-func RollbackHandler[G Game](cl Client, g G) gin.HandlerFunc {
+func (cl Client[G, I]) RollbackHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -321,12 +324,13 @@ func RollbackHandler[G Game](cl Client, g G) gin.HandlerFunc {
 		}
 
 		rev := obj.Rev - 1
-		if err := getRev(ctx, cl, g, rev); err != nil {
+		g, err := cl.getRev(ctx, rev)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		err = Save(ctx, cl, g, cu)
+		err = cl.Save(ctx, g, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -336,7 +340,7 @@ func RollbackHandler[G Game](cl Client, g G) gin.HandlerFunc {
 	}
 }
 
-func RollforwardHandler[G Game](cl Client, g G) gin.HandlerFunc {
+func (cl Client[G, I]) RollforwardHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -363,7 +367,7 @@ func RollforwardHandler[G Game](cl Client, g G) gin.HandlerFunc {
 		}
 
 		rev := obj.Rev + 1
-		err = getRev(ctx, cl, g, rev)
+		g, err := cl.getRev(ctx, rev)
 		if status.Code(err) == codes.NotFound {
 			JErr(ctx, fmt.Errorf("cannot roll forward any further: %w", ErrValidation))
 			return
@@ -373,7 +377,7 @@ func RollforwardHandler[G Game](cl Client, g G) gin.HandlerFunc {
 			return
 		}
 
-		err = Save(ctx, cl, g, cu)
+		err = cl.Save(ctx, g, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -390,43 +394,47 @@ func ValidateAdmin(cu User) error {
 	return errors.New("not admin")
 }
 
-func getRev[G Game](ctx *gin.Context, cl Client, g G, rev int) error {
+func (cl Client[G, I]) getRev(ctx *gin.Context, rev int) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
+
+	var g G
+	g = g.New()
 
 	id := getID(ctx)
 	snap, err := cl.GameDocRef(id, rev).Get(ctx)
 	if err != nil {
-		return err
+		return g, err
 	}
 
 	if err := snap.DataTo(g); err != nil {
-		return err
+		return g, err
 	}
 	g.Head().ID = id
-	return nil
+	return g, nil
 }
 
-func GetGame[G Game](ctx *gin.Context, cl Client, g G, cu User, action ...stackFunc) error {
+func (cl Client[G, I]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	if err := GetCommitted(ctx, cl, g); err != nil {
-		return err
+	g, err := cl.GetCommitted(ctx)
+	if err != nil {
+		return g, err
 	}
 
 	// if current user not current player, then simply return g which is committed game
 	if !g.IsCurrentPlayer(cu) {
-		return nil
+		return g, nil
 	}
 
 	undo, err := cl.GetStack(ctx, cu.ID())
 	// if undo stack not found, then simply return g which is committed game
 	if status.Code(err) == codes.NotFound {
-		return nil
+		return g, nil
 	}
 	if err != nil {
-		return err
+		return g, err
 	}
 
 	if len(action) == 1 {
@@ -434,57 +442,62 @@ func GetGame[G Game](ctx *gin.Context, cl Client, g G, cu User, action ...stackF
 	}
 	if undo.Current == undo.Committed {
 		g.Head().Undo = undo
-		return nil
+		return g, nil
 	}
 
-	if err := getCached(ctx, cl, g, undo.Current, cu.ID()); err != nil {
-		return err
+	g, err = cl.getCached(ctx, undo.Current, cu.ID())
+	if err != nil {
+		return g, err
 	}
 	g.Head().Undo = undo
-	return nil
+	return g, nil
 }
 
-func getCached[G Game](ctx *gin.Context, cl Client, g G, rev int, uid UID) error {
+func (cl Client[G, I]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
+	var g G
+	g = g.New()
 	id := getID(ctx)
 	snap, err := cl.FullyCachedDocRef(id, rev, uid).Get(ctx)
 	if err != nil {
-		return err
+		return g, err
 	}
 
 	if err := snap.DataTo(g); err != nil {
-		return err
+		return g, err
 	}
 
 	g.Head().ID = id
-	return nil
+	return g, nil
 }
 
 const (
 	cachedRootKind = "CachedRoot"
 )
 
-func GetCommitted[G Game](ctx *gin.Context, cl Client, g G) error {
+func (cl Client[G, I]) GetCommitted(ctx *gin.Context) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
+	var g G
+	g = g.New()
 	id := getID(ctx)
 	snap, err := cl.CommittedDocRef(id).Get(ctx)
 	if err != nil {
-		return err
+		return g, err
 	}
 
 	if err := snap.DataTo(g); err != nil {
-		return err
+		return g, err
 	}
 
 	g.Head().ID = id
-	return nil
+	return g, nil
 }
 
-func PutCached[G Game](ctx *gin.Context, cl Client, g G, u User) error {
+func (cl Client[G, I]) PutCached(ctx *gin.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -493,12 +506,12 @@ func PutCached[G Game](ctx *gin.Context, cl Client, g G, u User) error {
 			return err
 		}
 
-		uids, views := g.Views()
-		for i, v := range views {
-			if err := tx.Set(cl.ViewDocRef(g.Head().ID, uids[i]), v); err != nil {
-				return err
-			}
-		}
+		// uids, views := g.Views()
+		// for i, v := range views {
+		// 	if err := tx.Set(cl.ViewDocRef(g.Head().ID, uids[i]), v); err != nil {
+		// 		return err
+		// 	}
+		// }
 
 		if err := tx.Set(cl.CachedDocRef(g.Head().ID, g.Head().Rev(), u.ID()), viewFor(g, u.ID())); err != nil {
 			return err
@@ -508,12 +521,12 @@ func PutCached[G Game](ctx *gin.Context, cl Client, g G, u User) error {
 	})
 }
 
-func viewFor[G Game](g G, uid1 UID) G {
+func viewFor[G Game[G]](g G, uid1 UID) G {
 	uids, views := g.Views()
-	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })].(G)
+	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
 }
 
-func CachedHandler[G Game](cl Client, g G, action func(G, *gin.Context, User) error) gin.HandlerFunc {
+func (cl Client[G, I]) CachedHandler(action func(G, *gin.Context, User) error) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -523,7 +536,8 @@ func CachedHandler[G Game](cl Client, g G, action func(G, *gin.Context, User) er
 			cl.Log.Warningf(err.Error())
 		}
 
-		if err := GetGame(ctx, cl, g, cu); err != nil {
+		g, err := cl.GetGame(ctx, cu)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -534,7 +548,7 @@ func CachedHandler[G Game](cl Client, g G, action func(G, *gin.Context, User) er
 		}
 		g.Head().Undo.Update()
 
-		if err := PutCached(ctx, cl, g, cu); err != nil {
+		if err := cl.PutCached(ctx, g, cu); err != nil {
 			JErr(ctx, err)
 			return
 		}

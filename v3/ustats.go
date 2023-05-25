@@ -175,7 +175,7 @@ func GetUStats(ctx *gin.Context, cl *firestore.Client, maxPlayers int, uids ...U
 	return ustats, nil
 }
 
-func (cl Client) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
+func (cl Client[G, I]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
 	t := time.Now()
 	for _, ustat := range ustats {
 		ustat.UpdatedAt = t

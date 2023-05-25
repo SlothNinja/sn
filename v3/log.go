@@ -150,11 +150,11 @@ func NewLogClient(parent string, opts ...option.ClientOption) (*LogClient, error
 }
 
 type LogClient struct {
-	client *logging.Client
+	*logging.Client
 }
 
 func (cl *LogClient) Close() error {
-	return cl.client.Close()
+	return cl.Close()
 }
 
 type Logger struct {
@@ -166,7 +166,7 @@ func (cl *LogClient) Logger(logID string, opts ...logging.LoggerOption) *Logger 
 	if !isProduction() {
 		return new(Logger)
 	}
-	return &Logger{logID: logID, Logger: cl.client.Logger(logID, opts...)}
+	return &Logger{logID: logID, Logger: cl.Client.Logger(logID, opts...)}
 }
 
 func (l *Logger) Debugf(tmpl string, args ...interface{}) {
