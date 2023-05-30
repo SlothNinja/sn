@@ -41,7 +41,9 @@ type Data struct {
 	UpdatedAt          time.Time
 }
 
-func (cl Client[G, I]) CuHandler() gin.HandlerFunc {
+type readMap map[string]int
+
+func (cl Client[G, I, P]) CuHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -153,7 +155,7 @@ func GravatarURL(email, size, gravType string) string {
 	return fmt.Sprintf("https://www.gravatar.com/avatar/%s?s=%s&d=%s&f=y", md5string, size, gravType)
 }
 
-func (cl Client[G, I]) Update(c *gin.Context, cu, u1, u2 User) error {
+func (cl Client[G, I, P]) Update(c *gin.Context, cu, u1, u2 User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -192,7 +194,7 @@ func (cl Client[G, I]) Update(c *gin.Context, cu, u1, u2 User) error {
 	return nil
 }
 
-func (cl Client[G, I]) updateName(c *gin.Context, u User, n string) error {
+func (cl Client[G, I, P]) updateName(c *gin.Context, u User, n string) error {
 	matcher := regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._%+\-]+$`)
 
 	switch {
@@ -216,7 +218,7 @@ func (cl Client[G, I]) updateName(c *gin.Context, u User, n string) error {
 	}
 }
 
-func (cl Client[G, I]) NameIsUnique(c *gin.Context, name string) (bool, error) {
+func (cl Client[G, I, P]) NameIsUnique(c *gin.Context, name string) (bool, error) {
 	LCName := strings.ToLower(name)
 
 	q := datastore.NewQuery("User").Filter("LCName=", LCName)
@@ -283,7 +285,7 @@ func (u *User) Equal(u2 *User) bool {
 // 	withUsers(withCount(c, cnt), us)
 // }
 
-func (cl Client[G, I]) getFiltered(c *gin.Context, start, length string) ([]User, int64, error) {
+func (cl Client[G, I, P]) getFiltered(c *gin.Context, start, length string) ([]User, int64, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -350,7 +352,7 @@ func getUID(c *gin.Context, param string) (int64, error) {
 
 var ErrMissingToken = fmt.Errorf("missing token")
 
-func (cl Client[G, I]) Current(c *gin.Context) (User, error) {
+func (cl Client[G, I, P]) Current(c *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -363,32 +365,32 @@ func (cl Client[G, I]) Current(c *gin.Context) (User, error) {
 	return cl.Get(c, token.ID)
 }
 
-func WithUser(c *gin.Context, u *User) {
-	c.Set(userKey, u)
-}
-
-func WithCurrent(c *gin.Context, u *User) {
-	c.Set(currentKey, u)
-}
-
-func UsersFrom(c *gin.Context) []*User {
-	us, _ := c.Value(usersKey).([]*User)
-	return us
-}
-
-func withUsers(c *gin.Context, us []*User) {
-	c.Set(usersKey, us)
-}
-
-func withCount(c *gin.Context, cnt int64) *gin.Context {
-	c.Set(countKey, cnt)
-	return c
-}
-
-func CountFrom(c *gin.Context) (cnt int64) {
-	cnt, _ = c.Value(countKey).(int64)
-	return
-}
+// func WithUser(c *gin.Context, u *User) {
+// 	c.Set(userKey, u)
+// }
+//
+// func WithCurrent(c *gin.Context, u *User) {
+// 	c.Set(currentKey, u)
+// }
+//
+// func UsersFrom(c *gin.Context) []*User {
+// 	us, _ := c.Value(usersKey).([]*User)
+// 	return us
+// }
+//
+// func withUsers(c *gin.Context, us []*User) {
+// 	c.Set(usersKey, us)
+// }
+//
+// func withCount(c *gin.Context, cnt int64) *gin.Context {
+// 	c.Set(countKey, cnt)
+// 	return c
+// }
+//
+// func CountFrom(c *gin.Context) (cnt int64) {
+// 	cnt, _ = c.Value(countKey).(int64)
+// 	return
+// }
 
 func (u User) MarshalJSON() ([]byte, error) {
 	type usr User
@@ -401,14 +403,14 @@ func (u User) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (cl Client[G, I]) Get(c *gin.Context, uid UID) (User, error) {
+func (cl Client[G, I, P]) Get(c *gin.Context, uid UID) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.get(c, newUserKey(uid))
 }
 
-func (cl Client[G, I]) get(c *gin.Context, k *datastore.Key) (User, error) {
+func (cl Client[G, I, P]) get(c *gin.Context, k *datastore.Key) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -420,7 +422,7 @@ func (cl Client[G, I]) get(c *gin.Context, k *datastore.Key) (User, error) {
 	return cl.dsGet(c, k)
 }
 
-func (cl Client[G, I]) mcGet(k *datastore.Key) (User, error) {
+func (cl Client[G, I, P]) mcGet(k *datastore.Key) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -440,7 +442,7 @@ func (cl Client[G, I]) mcGet(k *datastore.Key) (User, error) {
 	return u, nil
 }
 
-func (cl Client[G, I]) mcGetMulti(ks []*datastore.Key) ([]User, error) {
+func (cl Client[G, I, P]) mcGetMulti(ks []*datastore.Key) ([]User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -465,7 +467,7 @@ func (cl Client[G, I]) mcGetMulti(ks []*datastore.Key) ([]User, error) {
 	return us, me
 }
 
-func (cl Client[G, I]) dsGet(c *gin.Context, k *datastore.Key) (User, error) {
+func (cl Client[G, I, P]) dsGet(c *gin.Context, k *datastore.Key) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -482,7 +484,7 @@ func (cl Client[G, I]) dsGet(c *gin.Context, k *datastore.Key) (User, error) {
 	return u, nil
 }
 
-func (cl Client[G, I]) dsGetMulti(c *gin.Context, ks []*datastore.Key) ([]User, error) {
+func (cl Client[G, I, P]) dsGetMulti(c *gin.Context, ks []*datastore.Key) ([]User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -502,14 +504,14 @@ func (cl Client[G, I]) dsGetMulti(c *gin.Context, ks []*datastore.Key) ([]User, 
 	return us, nil
 }
 
-func (cl Client[G, I]) cacheUser(u User) {
+func (cl Client[G, I, P]) cacheUser(u User) {
 	if u.Key == nil {
 		return
 	}
 	cl.Cache.SetDefault(u.Key.Encode(), u)
 }
 
-func (cl Client[G, I]) GetMulti(c *gin.Context, uids []UID) ([]User, error) {
+func (cl Client[G, I, P]) GetMulti(c *gin.Context, uids []UID) ([]User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -530,14 +532,14 @@ func (cl Client[G, I]) GetMulti(c *gin.Context, uids []UID) ([]User, error) {
 // 	return cl.DS.AllocateIDs(c, ks)
 // }
 
-func (cl Client[G, I]) Put(c *gin.Context, k *datastore.Key, u User) (*datastore.Key, error) {
+func (cl Client[G, I, P]) Put(c *gin.Context, k *datastore.Key, u User) (*datastore.Key, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.putUserByKey(c, k, u)
 }
 
-func (cl Client[G, I]) putUserByKey(c *gin.Context, k *datastore.Key, u User) (*datastore.Key, error) {
+func (cl Client[G, I, P]) putUserByKey(c *gin.Context, k *datastore.Key, u User) (*datastore.Key, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

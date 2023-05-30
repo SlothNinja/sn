@@ -85,41 +85,40 @@ func newUStat(uid UID, maxPlayers int) UStat {
 	}
 }
 
-func ustatDocRef(cl *firestore.Client, uid UID) *firestore.DocumentRef {
-	return cl.Collection(ustatsKind).Doc(fmt.Sprintf("%d", uid))
+func (cl Client[G, I, P]) ustatDocRef(uid UID) *firestore.DocumentRef {
+	return cl.FS.Collection(ustatsKind).Doc(fmt.Sprintf("%d", uid))
 }
 
-func (h Header) UpdateUStats(stats []UStat, pstats []Stats, uids []UID) {
+func (g Game[P]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
+	var ustats = make([]UStat, len(stats))
 	for i := range stats {
-		stats[i] = h.UpdateUStat(stats[i], pstats[i], uids[i])
+		ustats[i] = g.updateUStat(stats[i], pstats[i], uids[i])
 	}
+	return ustats
 }
 
-func (h Header) UpdateUStat(stat UStat, pstats Stats, uid UID) UStat {
-	Debugf("stat: %#v", stat)
-	Debugf("pstats: %#v", pstats)
-	Debugf("uid: %#v", uid)
+func (g Game[P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 	stat.Played[0]++
-	stat.Played[h.NumPlayers]++
-	for _, id := range h.WinnerIDS {
+	stat.Played[g.NumPlayers]++
+	for _, id := range g.WinnerIDS {
 		if id == uid {
 			stat.Won[0]++
-			stat.Won[h.NumPlayers]++
+			stat.Won[g.NumPlayers]++
 			break
 		}
 	}
 
 	stat.Moves[0] += pstats.Moves
-	stat.Moves[h.NumPlayers] += pstats.Moves
+	stat.Moves[g.NumPlayers] += pstats.Moves
 
 	stat.Think[0] += pstats.Think
-	stat.Think[h.NumPlayers] += pstats.Think
+	stat.Think[g.NumPlayers] += pstats.Think
 
 	stat.Scored[0] += int64(pstats.Score)
-	stat.Scored[h.NumPlayers] += int64(pstats.Score)
+	stat.Scored[g.NumPlayers] += int64(pstats.Score)
 
 	stat.Finish[0] += int64(pstats.Finish)
-	stat.Finish[h.NumPlayers] += int64(pstats.Finish)
+	stat.Finish[g.NumPlayers] += int64(pstats.Finish)
 
 	if stat.Played[0] != 0 {
 		stat.WinPercentage[0] = float32(stat.Won[0]) / float32(stat.Played[0])
@@ -133,31 +132,31 @@ func (h Header) UpdateUStat(stat UStat, pstats Stats, uid UID) UStat {
 		stat.ThinkAvg[0] = stat.Think[0] / time.Duration(stat.Moves[0])
 	}
 
-	if stat.Played[h.NumPlayers] > 0 {
-		stat.WinPercentage[h.NumPlayers] = float32(stat.Won[h.NumPlayers]) / float32(stat.Played[h.NumPlayers])
-		stat.FinishAvg[h.NumPlayers] = float32(stat.Finish[h.NumPlayers]) / float32(stat.Played[h.NumPlayers])
-		stat.ScoreAvg[h.NumPlayers] = float32(stat.Scored[h.NumPlayers]) / float32(stat.Played[h.NumPlayers])
+	if stat.Played[g.NumPlayers] > 0 {
+		stat.WinPercentage[g.NumPlayers] = float32(stat.Won[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
+		stat.FinishAvg[g.NumPlayers] = float32(stat.Finish[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
+		stat.ScoreAvg[g.NumPlayers] = float32(stat.Scored[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
 	}
 
-	if h.NumPlayers != 0 {
-		stat.ExpectedWinPercentage[h.NumPlayers] = 1.0 / float32(h.NumPlayers)
+	if g.NumPlayers != 0 {
+		stat.ExpectedWinPercentage[g.NumPlayers] = 1.0 / float32(g.NumPlayers)
 	}
 
-	if stat.Moves[h.NumPlayers] != 0 {
-		stat.ThinkAvg[h.NumPlayers] = stat.Think[h.NumPlayers] / time.Duration(stat.Moves[h.NumPlayers])
+	if stat.Moves[g.NumPlayers] != 0 {
+		stat.ThinkAvg[g.NumPlayers] = stat.Think[g.NumPlayers] / time.Duration(stat.Moves[g.NumPlayers])
 	}
 	return stat
 
 }
 
-func GetUStats(ctx *gin.Context, cl *firestore.Client, maxPlayers int, uids ...UID) ([]UStat, error) {
+func (cl Client[G, I, P]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
 	Debugf(msgEnter)
 	Debugf(msgExit)
 
 	l := len(uids)
 	ustats := make([]UStat, l)
 	for i, uid := range uids {
-		snap, err := ustatDocRef(cl, uid).Get(ctx)
+		snap, err := cl.ustatDocRef(uid).Get(ctx)
 		if status.Code(err) == codes.NotFound {
 			ustats[i] = newUStat(uid, maxPlayers)
 			ustats[i].CreatedAt = time.Now()
@@ -175,11 +174,11 @@ func GetUStats(ctx *gin.Context, cl *firestore.Client, maxPlayers int, uids ...U
 	return ustats, nil
 }
 
-func (cl Client[G, I]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
+func (cl Client[G, I, P]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
 	t := time.Now()
 	for _, ustat := range ustats {
 		ustat.UpdatedAt = t
-		if err := tx.Set(ustatDocRef(cl.FS, ustat.ID), ustat); err != nil {
+		if err := tx.Set(cl.ustatDocRef(ustat.ID), ustat); err != nil {
 			return err
 		}
 	}

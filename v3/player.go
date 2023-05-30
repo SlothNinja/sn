@@ -1,18 +1,68 @@
 package sn
 
 import (
+	"sort"
+
+	"cloud.google.com/go/datastore"
 	"github.com/elliotchance/pie/v2"
 )
 
-//	func init() {
-//		gob.Register(NewPlayer())
-//	}
+type Player struct {
+	ID              PID
+	Passed          bool
+	PerformedAction bool
+	Colors          []Color
+	Stats
+}
+
+func (p Player) GetPID() PID {
+	return p.ID
+}
+
+func (p *Player) setPID(pid PID) {
+	p.ID = pid
+}
+
+func (p Player) GetPassed() bool {
+	return p.Passed
+}
+
+func (p Player) GetPerformedAction() bool {
+	return p.PerformedAction
+}
+
+func (p Player) GetStats() *Stats {
+	return &(p.Stats)
+}
+
+func (p *Player) Reset() {
+	p.PerformedAction = false
+	p.Passed = false
+}
+
+type Playerer interface {
+	GetPID() PID
+	GetPassed() bool
+	GetPerformedAction() bool
+	GetStats() *Stats
+	Reset()
+	Copy() Playerer
+
+	compareByScore(Playerer) Comparison
+	New() Playerer
+	setPID(PID)
+}
+
+type Players[P Playerer] []P
+
 type Comparison int
 
 const (
 	EqualTo     Comparison = 0
 	LessThan    Comparison = -1
 	GreaterThan Comparison = 1
+	Ascending              = LessThan
+	Descending             = GreaterThan
 )
 
 type UIndex int
@@ -29,120 +79,6 @@ func (pid PID) ToIndex() UIndex {
 
 const NoPID PID = 0
 
-//	type Player struct {
-//		gamer           Gamer
-//		user            *User
-//		rating          *CurrentRating
-//		IDF             PID  `form:"idf"`
-//		PerformedAction bool `form:"performed-action"`
-//		Score           int  `form:"score"`
-//		Passed          bool `form:"passed"`
-//		ColorMapF       []Color
-//	}
-//
-// type Players []*Player
-//
-//	type jPlayer struct {
-//		User            *User          `json:"user"`
-//		Rating          *CurrentRating `json:"rating"`
-//		IDF             PID            `json:"id"`
-//		PerformedAction bool           `json:"performedAction"`
-//		Score           int            `json:"score"`
-//		Passed          bool           `json:"passed"`
-//		ColorMap        []Color        `json:"colorMap"`
-//	}
-//
-//	func (p *Player) MarshalJSON() ([]byte, error) {
-//		j := &jPlayer{
-//			User:            p.user,
-//			Rating:          p.rating,
-//			IDF:             p.IDF,
-//			PerformedAction: p.PerformedAction,
-//			Score:           p.Score,
-//			Passed:          p.Passed,
-//			ColorMap:        p.ColorMap(),
-//		}
-//		return json.Marshal(j)
-//	}
-//
-//	type Playerer interface {
-//		ID() PID
-//		UIndex() UIndex
-//		User() *User
-//		Name() string
-//		Color() Color
-//		ColorMap() []Color
-//	}
-//
-//	func (p *Player) CompareByScore(p2 *Player) (c Comparison) {
-//		switch {
-//		case p.Score < p2.Score:
-//			c = LessThan
-//		case p.Score > p2.Score:
-//			c = GreaterThan
-//		default:
-//			c = EqualTo
-//		}
-//		return
-//	}
-//
-// type Playerers []Playerer
-//
-//	func (p *Player) Game() Gamer {
-//		return p.gamer
-//	}
-//
-//	func (p *Player) SetGame(gamer Gamer) {
-//		p.gamer = gamer
-//	}
-//
-//	func NewPlayer() (p *Player) {
-//		p = new(Player)
-//		return
-//	}
-//
-//	func (p *Player) ID() PID {
-//		return p.IDF
-//	}
-//
-//	func (p *Player) SetID(id PID) {
-//		p.IDF = id
-//	}
-//
-//	func (p *Player) ColorMap() []Color {
-//		return p.ColorMapF
-//	}
-//
-//	func (p *Player) SetColorMap(colors []Color) {
-//		p.ColorMapF = colors
-//	}
-//
-//	func (p *Player) Equal(p2 Playerer) bool {
-//		return p2 != nil && p.ID() == p2.ID()
-//	}
-//
-//	func (p *Player) NotEqual(p2 Playerer) bool {
-//		return !p.Equal(p2)
-//	}
-//
-//	func (p *Player) User() *User {
-//		if p.user == nil {
-//			p.user = p.gamer.User(p.UIndex())
-//		}
-//		return p.user
-//	}
-//
-//	func (p *Player) UIndex() UIndex {
-//		return p.ID().ToIndex()
-//	}
-//
-//	func (h *Header) UserIDFor(pid PID) int64 {
-//		l, uIndex := UIndex(len(h.UserIDS)), pid.ToIndex()
-//		if uIndex >= 0 && uIndex < l {
-//			return h.UserIDS[uIndex]
-//		}
-//		return 0
-//	}
 func (h Header) NameFor(pid PID) string {
 	return h.UserNames[pid.ToIndex()]
 }
@@ -169,124 +105,88 @@ func (h Header) EmailNotificationsFor(pid PID) bool {
 	return h.UserEmailNotifications[pid.ToIndex()]
 }
 
-// func (h Header) UKeyFor(pid PID) *datastore.Key {
-// 	return h.UserKeys[pid.ToIndex()]
-// }
-
 func (h Header) GravTypeFor(pid PID) string {
 	return h.UserGravTypes[pid.ToIndex()]
 }
-
-// // Name provides the name of the player.
-// // TODO: Deprecated in favor of NameFor.
-// func (p *Player) Name() (s string) {
-// 	if p != nil && p.User() != nil {
-// 		s = p.User().Name
-// 	}
-// 	return
-// }
-//
-// // Index provides the index in players for the player.
-// // TODO: Deprecated in favor of IndexFor
-// func (p *Player) UIndex() (index UIndex) {
-// 	return UIndexFor(p, p.Game().(GetPlayerers).GetPlayerers())
-// }
-
-// // IndexFor returns the index for the player in players, if present.
-// // Returns NotFound, the player not in players.
-// func UIndexFor(p Playerer, ps Playerers) (index UIndex) {
-// 	index = NotFound
-// 	for i, p2 := range ps {
-// 		if p.ID() == p2.ID() {
-// 			index = i
-// 			break
-// 		}
-// 	}
-// 	return
-// }
 
 // NotFound indicates a value (e.g., player) was not found in the collection.
 const NotFound = -1
 const UIndexNotFound UIndex = -1
 
-//
-//	func (p *Player) Color() Color {
-//		if p == nil {
-//			return NoColor
-//		}
-//		colorMap := p.gamer.DefaultColorMap()
-//		return colorMap[p.ID()]
-//	}
-//
-//	func (ps Playerers) Colors() []Color {
-//		cs := make([]Color, len(ps))
-//		for i, p := range ps {
-//			cs[i] = p.Color()
-//		}
-//		return cs
-//	}
-//
-//	var textColors = map[Color]Color{
-//		Yellow: Black,
-//		Purple: White,
-//		Green:  Yellow,
-//		White:  Black,
-//		Black:  White,
-//	}
-//
-//	func (p *Player) TextColor() (c Color) {
-//		var ok bool
-//		if c, ok = textColors[p.Color()]; !ok {
-//			c = Black
-//		}
-//		return
-//	}
-//
-// A bit of a misnomer
-// Returns whether the current user is the same as the player's user
-// func (p *Player) IsCurrentUser(cu *User) bool {
-// 	if p == nil {
-// 		return false
-// 	}
-// 	return p.User().Equal(cu)
-// }
-//
-// func (p *Player) IsCurrentPlayer() bool {
-// 	for _, player := range p.gamer.CurrentPlayerers() {
-// 		if player != nil && p.Equal(player) {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-//
-// func (p *Player) IsWinner() (b bool) {
-// 	for _, p2 := range p.gamer.Winnerers() {
-// 		if b = p2 != nil && p.Equal(p2); b {
-// 			break
-// 		}
-// 	}
-// 	return
-// }
-//
-// func (p *Player) Init(g Gamer) {
-// 	p.SetGame(g)
-// }
-//
-// func (p *Player) Gravatar() string {
-// 	return fmt.Sprintf(`<a href="/user/show/%d" ><img src=%q alt="Gravatar" class="%s-border" /> </a>`,
-// 		p.User().ID, p.User().Gravatar("80"), p.Color())
-// }
-//
-// func (h *Header) GravatarFor(pid PID) template.HTML {
-// 	return template.HTML(fmt.Sprintf(`<a href=%q ><img src=%q alt="Gravatar" class="%s-border" /> </a>`,
-// 		h.UserPathFor(pid), GravatarURL(h.EmailFor(pid), "80", h.GravTypeFor(pid)), h.ColorFor(pid)))
-// }
-//
-// func (h *Header) UserPathFor(pid PID) template.HTML {
-// 	return PathFor(h.UserIDFor(pid))
-// }
-//
-// func (h *Header) ColorFor(pid PID) Color {
-// 	return h.DefaultColorMap()[pid]
-// }
+func sortedByScore[P Playerer](ps []P, c Comparison) {
+	sort.SliceStable(ps, func(i, j int) bool { return ps[i].compareByScore(ps[j]) == c })
+}
+
+func (p Player) compareByScore(p2 Playerer) Comparison {
+	switch {
+	case p.Score < p2.GetStats().Score:
+		return LessThan
+	case p.Score > p2.GetStats().Score:
+		return GreaterThan
+	default:
+		return EqualTo
+	}
+}
+
+func (g Game[P]) determinePlaces() (Results, error) {
+	rs := make(Results)
+	sortedByScore(g.Players, Descending)
+	ps := g.copyPlayers()
+
+	place := 1
+	for len(ps) != 0 {
+		// Find all players tied at place
+		found := pie.Filter(ps, func(p P) bool { return ps[0].compareByScore(p) == EqualTo })
+		// Get user keys for found players
+		rs[place] = pie.Map(found, func(p P) *datastore.Key { return g.UserKeyFor(p.GetPID()) })
+		// Set ps to remaining players
+		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.GetPID() == p2.GetPID() })
+		// Above does not guaranty order so sort
+		sortedByScore(ps, Descending)
+		// Increase place by number of players added to current place
+		place += len(rs[place])
+	}
+	// 	for _, p1 := range g.players {
+	// 		rs[place] = append(rs[place], g.userKeyFor(p1.ID))
+	// 		for _, p2 := range g.players {
+	// 			if p1.ID != p2.ID && p1.compare(p2) != equalTo {
+	// 				place++
+	// 				break
+	// 			}
+	// 		}
+	// 	}
+	return rs, nil
+}
+
+func diff[T any](ss []T, against []T, equal func(T, T) bool) (added, removed []T) {
+	// This is probably not the best way to do it. We do an O(n^2) between the
+	// slices to see which items are missing in each direction.
+
+	diffOneWay := func(ss1, ss2raw []T) (result []T) {
+		ss2 := make([]T, len(ss2raw))
+		copy(ss2, ss2raw)
+
+		for _, s := range ss1 {
+			found := false
+
+			for i, element := range ss2 {
+				if equal(s, element) {
+					ss2 = append(ss2[:i], ss2[i+1:]...)
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				result = append(result, s)
+			}
+		}
+
+		return
+	}
+
+	removed = diffOneWay(ss, against)
+	added = diffOneWay(against, ss)
+
+	return
+}

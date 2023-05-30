@@ -35,7 +35,7 @@ func VersionID() string {
 	return os.Getenv(GAE_VERSION)
 }
 
-func (cl Client[G, I]) RequireLogin(ctx *gin.Context) (u User, err error) {
+func (cl Client[G, I, P]) RequireLogin(ctx *gin.Context) (u User, err error) {
 	if u, err = cl.Current(ctx); err != nil {
 		return u, fmt.Errorf("must login to access resource: %w", err)
 	}

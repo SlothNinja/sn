@@ -181,7 +181,7 @@ func NewOAuth(id string) OAuth {
 	return OAuth{Key: NewOAuthKey(id)}
 }
 
-func (cl Client[G, I]) Auth(path string) gin.HandlerFunc {
+func (cl Client[G, I, P]) Auth(path string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -257,7 +257,7 @@ func isAdmin(u User) bool {
 	return u.Admin
 }
 
-func (cl Client[G, I]) As(c *gin.Context) {
+func (cl Client[G, I, P]) As(c *gin.Context) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -328,11 +328,11 @@ func getUInfo(c *gin.Context, path string) (OAInfo, error) {
 	return uInfo, nil
 }
 
-func (cl Client[G, I]) getOAuth(c *gin.Context, id string) (OAuth, error) {
+func (cl Client[G, I, P]) getOAuth(c *gin.Context, id string) (OAuth, error) {
 	return cl.getOAuthByKey(c, NewOAuthKey(id))
 }
 
-func (cl Client[G, I]) getOAuthByKey(c *gin.Context, k *datastore.Key) (OAuth, error) {
+func (cl Client[G, I, P]) getOAuthByKey(c *gin.Context, k *datastore.Key) (OAuth, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -350,7 +350,7 @@ func (cl Client[G, I]) getOAuthByKey(c *gin.Context, k *datastore.Key) (OAuth, e
 	return oauth, nil
 }
 
-func (cl Client[G, I]) getCachedOAuth(k *datastore.Key) (OAuth, bool) {
+func (cl Client[G, I, P]) getCachedOAuth(k *datastore.Key) (OAuth, bool) {
 	oauth := NewOAuth(k.Name)
 	if k == nil {
 		return oauth, false
@@ -368,7 +368,7 @@ func (cl Client[G, I]) getCachedOAuth(k *datastore.Key) (OAuth, bool) {
 	return oauth, true
 }
 
-func (cl Client[G, I]) cacheOAuth(oauth OAuth) {
+func (cl Client[G, I, P]) cacheOAuth(oauth OAuth) {
 	if oauth.Key == nil {
 		return
 	}
@@ -387,7 +387,7 @@ func saveToSessionAndReturnTo(c *gin.Context, st *sessionToken, path string) {
 	return
 }
 
-func (cl Client[G, I]) getByEmail(c *gin.Context, email string) (User, error) {
+func (cl Client[G, I, P]) getByEmail(c *gin.Context, email string) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -471,7 +471,7 @@ func nameFrom(s sessions.Session) (string, error) {
 	return name, nil
 }
 
-func (cl Client[G, I]) LoginHandler() gin.HandlerFunc {
+func (cl Client[G, I, P]) LoginHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -485,7 +485,7 @@ func (cl Client[G, I]) LoginHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I]) LogoutHandler() gin.HandlerFunc {
+func (cl Client[G, I, P]) LogoutHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
