@@ -123,7 +123,7 @@ func NewMessage(u User, text string) Message {
 // 	}
 // }
 
-func (cl Client[G, I, P]) updateReadHandler() gin.HandlerFunc {
+func (cl Client[G, P]) updateReadHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cu, err := cl.Current(ctx)
 		if err != nil {
@@ -145,7 +145,7 @@ func (cl Client[G, I, P]) updateReadHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I, P]) updateRead(ctx *gin.Context, u User, read int) error {
+func (cl Client[G, P]) updateRead(ctx *gin.Context, u User, read int) error {
 	m, err := cl.getRead(ctx)
 	sid := fmt.Sprintf("%d", u.ID())
 	if status.Code(err) == codes.NotFound {
@@ -158,7 +158,7 @@ func (cl Client[G, I, P]) updateRead(ctx *gin.Context, u User, read int) error {
 	return err
 }
 
-func (cl Client[G, I, P]) getRead(ctx *gin.Context) (readMap, error) {
+func (cl Client[G, P]) getRead(ctx *gin.Context) (readMap, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -278,7 +278,7 @@ func getMessage(ctx *gin.Context) (m Message, r int, err error) {
 // 	})
 // }
 
-func (cl Client[G, I, P]) addMessageHandler() gin.HandlerFunc {
+func (cl Client[G, P]) addMessageHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -297,7 +297,7 @@ func (cl Client[G, I, P]) addMessageHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I, P]) validateAddMessage(ctx *gin.Context) (Message, int, error) {
+func (cl Client[G, P]) validateAddMessage(ctx *gin.Context) (Message, int, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -317,7 +317,7 @@ func (cl Client[G, I, P]) validateAddMessage(ctx *gin.Context) (Message, int, er
 	return m, read, nil
 }
 
-func (cl Client[G, I, P]) addMessage(ctx *gin.Context, m Message, read int) error {
+func (cl Client[G, P]) addMessage(ctx *gin.Context, m Message, read int) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

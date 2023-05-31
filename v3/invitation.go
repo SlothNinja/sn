@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/Pallinder/go-randomdata"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/api/iterator"
 )
 
@@ -18,30 +20,31 @@ const hashKind = "Hash"
 
 func updateTime() (t time.Time) { return }
 
-type Invitation[I any] interface {
-	FromForm(*gin.Context, User) (I, []byte, error)
-	Head() *Header
-	Default() I
-}
+// type Invitation[I any] interface {
+// 	FromForm(*gin.Context, User) (I, []byte, error)
+// 	Head() *Header
+// 	Default() I
+// }
 
-func (cl Client[G, I, P]) invitationDocRef(id string) *firestore.DocumentRef {
+type Invitation struct{ Header }
+
+func (cl Client[G, P]) invitationDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationCollectionRef().Doc(id)
 }
 
-func (cl Client[G, I, P]) invitationCollectionRef() *firestore.CollectionRef {
+func (cl Client[G, P]) invitationCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(invitationKind)
 }
 
-func (cl Client[G, I, P]) hashDocRef(id string) *firestore.DocumentRef {
+func (cl Client[G, P]) hashDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationDocRef(id).Collection(hashKind).Doc("hash")
 }
 
-func (cl Client[G, I, P]) getInvitation(ctx *gin.Context) (I, error) {
+func (cl Client[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var inv I
-	inv = inv.Default()
+	var inv Invitation
 
 	id := getID(ctx)
 	snap, err := cl.invitationDocRef(id).Get(ctx)
@@ -49,15 +52,15 @@ func (cl Client[G, I, P]) getInvitation(ctx *gin.Context) (I, error) {
 		return inv, err
 	}
 
-	if err = snap.DataTo(inv); err != nil {
+	if err = snap.DataTo(&inv); err != nil {
 		return inv, err
 	}
 
-	inv.Head().ID = id
+	inv.ID = id
 	return inv, nil
 }
 
-func (cl Client[G, I, P]) getHash(ctx context.Context, id string) ([]byte, error) {
+func (cl Client[G, P]) getHash(ctx context.Context, id string) ([]byte, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -78,13 +81,13 @@ func (cl Client[G, I, P]) getHash(ctx context.Context, id string) ([]byte, error
 	return hash, nil
 }
 
-func (cl Client[G, I, P]) deleteInvitation(ctx context.Context, id string) error {
+func (cl Client[G, P]) deleteInvitation(ctx context.Context, id string) error {
 	return cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		return cl.deleteInvitationIn(ctx, tx, id)
 	})
 }
 
-func (cl Client[G, I, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
+func (cl Client[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
 	ref := cl.invitationDocRef(id)
 	if err := tx.Delete(ref); err != nil {
 		return err
@@ -96,17 +99,19 @@ func (cl Client[G, I, P]) deleteInvitationIn(ctx context.Context, tx *firestore.
 	return nil
 }
 
-func (cl Client[G, I, P]) newInvitationHandler() gin.HandlerFunc {
+func (cl Client[G, P]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		var inv I
-		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv.Default()})
+		var inv Invitation
+		inv.Title = randomdata.SillyName()
+
+		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv})
 	}
 }
 
-func (cl Client[G, I, P]) createInvitationHandler() gin.HandlerFunc {
+func (cl Client[G, P]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -117,8 +122,8 @@ func (cl Client[G, I, P]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		var inv I
-		inv, hash, err := inv.FromForm(ctx, cu)
+		var inv Invitation
+		inv, hash, err := FromForm(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -139,16 +144,71 @@ func (cl Client[G, I, P]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		// capture title before resetting to defaults
-		title := inv.Head().Title
+		var inv2 Invitation
+		inv2.Title = randomdata.SillyName()
 		ctx.JSON(http.StatusOK, gin.H{
-			"Invitation": inv.Default(),
-			"Message":    fmt.Sprintf("%s created game %q", cu.Name, title),
+			"Invitation": inv2,
+			"Message":    fmt.Sprintf("%s created game %q", cu.Name, inv.Title),
 		})
 	}
 }
 
-func (cl Client[G, I, P]) acceptHandler() gin.HandlerFunc {
+func FromForm(ctx *gin.Context, cu User) (Invitation, []byte, error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	obj := struct {
+		Type       Type
+		Title      string
+		NumPlayers int
+		OptString  string
+		Password   string
+	}{}
+
+	err := ctx.ShouldBind(&obj)
+	if err != nil {
+		return Invitation{}, nil, err
+	}
+
+	var inv Invitation
+	inv.Title = cu.Name + "'s Game"
+	if obj.Title != "" {
+		inv.Title = obj.Title
+	}
+
+	inv.Type = obj.Type
+	inv.NumPlayers = obj.NumPlayers
+	inv.OptString = obj.OptString
+	inv.Status = Recruiting
+
+	// nv.NumPlayers = defaultPlayers
+	// f obj.NumPlayers >= minPlayers && obj.NumPlayers <= maxPlayers {
+	//        inv.NumPlayers = obj.NumPlayers
+	//
+
+	// ounds := defaultRounds
+	// f obj.RoundsPerPlayer >= minRounds && obj.RoundsPerPlayer <= maxRounds {
+	//        rounds = obj.RoundsPerPlayer
+	//
+	// nv.OptString, err = encodeOptions(rounds)
+	// f err != nil {
+	//        return nil, nil, err
+	//
+
+	var hash []byte
+	if len(obj.Password) > 0 {
+		hash, err = bcrypt.GenerateFromPassword([]byte(obj.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return Invitation{}, nil, err
+		}
+		inv.Private = true
+	}
+	inv.AddCreator(cu)
+	inv.AddUser(cu)
+	return inv, hash, nil
+}
+
+func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -239,7 +299,7 @@ func (h Header) startGameMessage(pid PID) string {
 		h.Title, h.NameFor(pid))
 }
 
-func (cl Client[G, I, P]) dropHandler() gin.HandlerFunc {
+func (cl Client[G, P]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -282,7 +342,7 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl Client[G, I, P]) Commit(ctx context.Context, g G, cu User) error {
+func (cl Client[G, P]) Commit(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -290,7 +350,7 @@ func (cl Client[G, I, P]) Commit(ctx context.Context, g G, cu User) error {
 	return cl.Save(ctx, g, cu)
 }
 
-func (cl Client[G, I, P]) Save(ctx context.Context, g G, u User) error {
+func (cl Client[G, P]) Save(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -299,7 +359,7 @@ func (cl Client[G, I, P]) Save(ctx context.Context, g G, u User) error {
 	})
 }
 
-func (cl Client[G, I, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
+func (cl Client[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -323,7 +383,7 @@ func (cl Client[G, I, P]) SaveGameIn(ctx context.Context, tx *firestore.Transact
 	return cl.clearCached(ctx, g, cu)
 }
 
-func (cl Client[G, I, P]) clearCached(ctx context.Context, g G, cu User) error {
+func (cl Client[G, P]) clearCached(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -369,7 +429,7 @@ type detail struct {
 	WP     float32
 }
 
-func (cl Client[G, I, P]) detailsHandler() gin.HandlerFunc {
+func (cl Client[G, P]) detailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)

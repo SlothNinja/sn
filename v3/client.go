@@ -19,7 +19,8 @@ import (
 
 var myRandomSource = rand.NewSource(time.Now().UnixNano())
 
-type Client[G Gamer[G], I Invitation[I], P Playerer] struct {
+// type Client[G Gamer[G], I Invitation[I], P Playerer] struct {
+type Client[G Gamer[G], P Playerer] struct {
 	FS     *firestore.Client
 	User   *datastore.Client
 	Log    *Logger
@@ -36,7 +37,7 @@ type Options struct {
 	Prefix        string
 }
 
-func NewClient[G Gamer[G], I Invitation[I], P Playerer](ctx context.Context, opt Options) Client[G, I, P] {
+func NewClient[G Gamer[G], P Playerer](ctx context.Context, opt Options) Client[G, P] {
 	lClient, err := NewLogClient(opt.ProjectID)
 	if err != nil {
 		log.Panicf("unable to create logging client: %v", err)
@@ -53,7 +54,7 @@ func NewClient[G Gamer[G], I Invitation[I], P Playerer](ctx context.Context, opt
 		if err != nil {
 			panic(fmt.Errorf("unable to connect to firestore database: %w", err))
 		}
-		cl := Client[G, I, P]{
+		cl := Client[G, P]{
 			User:   dsClient,
 			FS:     fsClient,
 			Log:    log,
@@ -79,7 +80,7 @@ func NewClient[G Gamer[G], I Invitation[I], P Playerer](ctx context.Context, opt
 	if err != nil {
 		panic(fmt.Errorf("unable to connect to firestore database: %w", err))
 	}
-	cl := Client[G, I, P]{
+	cl := Client[G, P]{
 		User:   dsClient,
 		FS:     fsClient,
 		Log:    log,
@@ -96,7 +97,7 @@ func NewClient[G Gamer[G], I Invitation[I], P Playerer](ctx context.Context, opt
 }
 
 // AddRoutes addes routing for game.
-func (cl Client[G, I, P]) addRoutes(prefix string) Client[G, I, P] {
+func (cl Client[G, P]) addRoutes(prefix string) Client[G, P] {
 	////////////////////////////////////////////
 	// Invitation Group
 	iGroup := cl.Router.Group(prefix + "/invitation")
@@ -180,7 +181,7 @@ func (cl Client[G, I, P]) addRoutes(prefix string) Client[G, I, P] {
 // 	return cl
 // }
 
-func (cl Client[G, I, P]) Close() error {
+func (cl Client[G, P]) Close() error {
 	cl.FS.Close()
 	return cl.User.Close()
 }

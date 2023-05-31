@@ -47,39 +47,39 @@ type Gamer[G any] interface {
 	updateUStats([]UStat, []*Stats, []UID) []UStat
 }
 
-func (cl Client[G, I, P]) gameDocRef(id string, rev int) *firestore.DocumentRef {
+func (cl Client[G, P]) gameDocRef(id string, rev int) *firestore.DocumentRef {
 	return cl.gameCollectionRef().Doc(fmt.Sprintf("%s-%d", id, rev))
 }
 
-func (cl Client[G, I, P]) gameCollectionRef() *firestore.CollectionRef {
+func (cl Client[G, P]) gameCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(gameKind)
 }
 
-func (cl Client[G, I, P]) cachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl Client[G, P]) cachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d", rev, uid))
 }
 
-func (cl Client[G, I, P]) fullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl Client[G, P]) fullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d-0", rev, uid))
 }
 
-func (cl Client[G, I, P]) cachedCollectionRef(id string) *firestore.CollectionRef {
+func (cl Client[G, P]) cachedCollectionRef(id string) *firestore.CollectionRef {
 	return cl.committedDocRef(id).Collection(cachedKind)
 }
 
-func (cl Client[G, I, P]) messageDocRef(gid, mid string) *firestore.DocumentRef {
+func (cl Client[G, P]) messageDocRef(gid, mid string) *firestore.DocumentRef {
 	return cl.messageCollectionRef(gid).Doc(mid)
 }
 
-func (cl Client[G, I, P]) messageCollectionRef(id string) *firestore.CollectionRef {
+func (cl Client[G, P]) messageCollectionRef(id string) *firestore.CollectionRef {
 	return cl.committedDocRef(id).Collection(mlogKind)
 }
 
-func (cl Client[G, I, P]) committedDocRef(id string) *firestore.DocumentRef {
+func (cl Client[G, P]) committedDocRef(id string) *firestore.DocumentRef {
 	return cl.FS.Collection(committedKind).Doc(id)
 }
 
-func (cl Client[G, I, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef {
+func (cl Client[G, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef {
 	return cl.committedDocRef(id).Collection(viewKind).Doc(fmt.Sprintf("%d", uid))
 }
 
@@ -209,7 +209,7 @@ const (
 	hParam  = "hid"
 )
 
-func (cl Client[G, I, P]) ResetHandler() gin.HandlerFunc {
+func (cl Client[G, P]) ResetHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -242,7 +242,7 @@ var NoUndo stackFunc = func(s *Stack) bool { return false }
 var Undo stackFunc = (*Stack).Undo
 var Redo stackFunc = (*Stack).Redo
 
-func (cl Client[G, I, P]) UndoHandler() gin.HandlerFunc {
+func (cl Client[G, P]) UndoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -283,7 +283,7 @@ func (cl Client[G, I, P]) UndoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I, P]) RedoHandler() gin.HandlerFunc {
+func (cl Client[G, P]) RedoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -324,7 +324,7 @@ func (cl Client[G, I, P]) RedoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I, P]) RollbackHandler() gin.HandlerFunc {
+func (cl Client[G, P]) RollbackHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -366,7 +366,7 @@ func (cl Client[G, I, P]) RollbackHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, I, P]) RollforwardHandler() gin.HandlerFunc {
+func (cl Client[G, P]) RollforwardHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -419,7 +419,7 @@ func ValidateAdmin(cu User) error {
 	return errors.New("not admin")
 }
 
-func (cl Client[G, I, P]) getRev(ctx *gin.Context, rev int) (G, error) {
+func (cl Client[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -439,7 +439,7 @@ func (cl Client[G, I, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	return g, nil
 }
 
-func (cl Client[G, I, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
+func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -478,7 +478,7 @@ func (cl Client[G, I, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc
 	return g, nil
 }
 
-func (cl Client[G, I, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
+func (cl Client[G, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -502,7 +502,7 @@ const (
 	cachedRootKind = "CachedRoot"
 )
 
-func (cl Client[G, I, P]) GetCommitted(ctx *gin.Context) (G, error) {
+func (cl Client[G, P]) GetCommitted(ctx *gin.Context) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -522,7 +522,7 @@ func (cl Client[G, I, P]) GetCommitted(ctx *gin.Context) (G, error) {
 	return g, nil
 }
 
-func (cl Client[G, I, P]) putCached(ctx *gin.Context, g G, u User) error {
+func (cl Client[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -544,7 +544,7 @@ func viewFor[G Gamer[G]](g G, uid1 UID) G {
 	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
 }
 
-func (cl Client[G, I, P]) CachedHandler(action func(G, *gin.Context, User) error) gin.HandlerFunc {
+func (cl Client[G, P]) CachedHandler(action func(G, *gin.Context, User) error) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -575,7 +575,7 @@ func (cl Client[G, I, P]) CachedHandler(action func(G, *gin.Context, User) error
 	}
 }
 
-func (cl Client[G, I, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, P, error)) gin.HandlerFunc {
+func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, P, error)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -771,7 +771,7 @@ func (g Game[P]) NextPlayer(cp P, ts ...func(P) bool) P {
 
 const maxPlayers = 6
 
-func (cl Client[G, I, P]) endGame(ctx *gin.Context, g G, cu User) {
+func (cl Client[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
