@@ -226,8 +226,8 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 		}
 
 		var hash []byte
-		if inv.Head().Private {
-			hash, err = cl.getHash(ctx, inv.Head().ID)
+		if inv.getHeader().Private {
+			hash, err = cl.getHash(ctx, inv.getHeader().ID)
 			if err != nil {
 				JErr(ctx, err)
 				return
@@ -244,26 +244,25 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		start, err := inv.Head().AcceptWith(cu, []byte(obj.Password), hash)
+		start, err := inv.getHeader().AcceptWith(cu, []byte(obj.Password), hash)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		if !start {
-			inv.Head().UpdatedAt = updateTime()
-			_, err = cl.invitationDocRef(inv.Head().ID).Set(ctx, inv)
+			inv.getHeader().UpdatedAt = updateTime()
+			_, err = cl.invitationDocRef(inv.getHeader().ID).Set(ctx, inv)
 			if err != nil {
 				JErr(ctx, err)
 				return
 			}
-			ctx.JSON(http.StatusOK, gin.H{"Message": inv.Head().acceptGameMessage(cu)})
+			ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().acceptGameMessage(cu)})
 			return
 		}
 
-		var g G
-		g = g.New()
-		cp := g.Start(inv.Head())
+		g := newGame[G]()
+		cp := g.Start(inv.getHeader())
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -274,7 +273,7 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 			if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
 				return err
 			}
-			return cl.deleteInvitationIn(ctx, tx, inv.Head().ID)
+			return cl.deleteInvitationIn(ctx, tx, inv.getHeader().ID)
 		}); err != nil {
 			JErr(ctx, err)
 			return
@@ -286,7 +285,7 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 		// 		cl.Log.Warningf(err.Error())
 		// 	}
 		//
-		ctx.JSON(http.StatusOK, gin.H{"Message": inv.Head().startGameMessage(cp.GetPID())})
+		ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().startGameMessage(cp.GetPID())})
 	}
 }
 
@@ -316,25 +315,25 @@ func (cl Client[G, P]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = inv.Head().Drop(cu)
+		err = inv.getHeader().Drop(cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		Debugf("ID: %#v", inv.Head().ID)
-		if len(inv.Head().UserIDS) != 0 {
-			inv.Head().UpdatedAt = updateTime()
-			_, err = cl.invitationDocRef(inv.Head().ID).Set(ctx, inv)
+		Debugf("ID: %#v", inv.getHeader().ID)
+		if len(inv.getHeader().UserIDS) != 0 {
+			inv.getHeader().UpdatedAt = updateTime()
+			_, err = cl.invitationDocRef(inv.getHeader().ID).Set(ctx, inv)
 		} else {
-			err = cl.deleteInvitation(ctx, inv.Head().ID)
+			err = cl.deleteInvitation(ctx, inv.getHeader().ID)
 		}
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		ctx.JSON(http.StatusOK, gin.H{"Message": inv.Head().dropGameMessage(cu)})
+		ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().dropGameMessage(cu)})
 	}
 }
 
@@ -346,7 +345,7 @@ func (cl Client[G, P]) Commit(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.Head().Undo.Commit()
+	g.getHeader().Undo.Commit()
 	return cl.Save(ctx, g, cu)
 }
 
@@ -363,20 +362,20 @@ func (cl Client[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.Head().UpdatedAt = updateTime()
+	g.getHeader().UpdatedAt = updateTime()
 
-	if err := tx.Set(cl.gameDocRef(g.Head().ID, g.Head().Rev()), g); err != nil {
+	if err := tx.Set(cl.gameDocRef(g.getHeader().ID, g.getHeader().Rev()), g); err != nil {
 		return err
 	}
 
-	if err := tx.Set(cl.committedDocRef(g.Head().ID), g); err != nil {
+	if err := tx.Set(cl.committedDocRef(g.getHeader().ID), g); err != nil {
 		return err
 	}
 
 	uids, views := g.Views()
 	for i, v := range views {
 		cl.Log.Debugf("v: %#v", v)
-		if err := tx.Set(cl.viewDocRef(g.Head().ID, uids[i]), v); err != nil {
+		if err := tx.Set(cl.viewDocRef(g.getHeader().ID, uids[i]), v); err != nil {
 			return err
 		}
 	}
@@ -387,7 +386,7 @@ func (cl Client[G, P]) clearCached(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	refs := cl.cachedCollectionRef(g.Head().ID).DocumentRefs(ctx)
+	refs := cl.cachedCollectionRef(g.getHeader().ID).DocumentRefs(ctx)
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -407,7 +406,7 @@ func (cl Client[G, P]) clearCached(ctx context.Context, g G, cu User) error {
 		}
 	}
 
-	_, err := cl.StackDocRef(g.Head().ID, cu.ID()).Delete(ctx)
+	_, err := cl.StackDocRef(g.getHeader().ID, cu.ID()).Delete(ctx)
 
 	return err
 }
@@ -446,10 +445,10 @@ func (cl Client[G, P]) detailsHandler() gin.HandlerFunc {
 			return
 		}
 
-		uids := make([]UID, len(inv.Head().UserIDS))
-		copy(uids, inv.Head().UserIDS)
+		uids := make([]UID, len(inv.getHeader().UserIDS))
+		copy(uids, inv.getHeader().UserIDS)
 
-		if hasUID := pie.Any(inv.Head().UserIDS, func(id UID) bool { return id == cu.ID() }); !hasUID {
+		if hasUID := pie.Any(inv.getHeader().UserIDS, func(id UID) bool { return id == cu.ID() }); !hasUID {
 			uids = append(uids, cu.ID())
 		}
 

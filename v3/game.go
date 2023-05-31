@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"reflect"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -33,18 +34,17 @@ type Game[P Playerer] struct {
 }
 
 type Gamer[G any] interface {
-	Head() *Header
-	IsCurrentPlayer(User) bool
 	Views() ([]UID, []G)
-	New() G
 	SetCurrentPlayers(...Playerer)
 	Start(*Header) Playerer
 
 	setFinishOrder() PlacesMap
+	getHeader() *Header
 	playerStats() []*Stats
 	playerUIDS() []UID
 	sendEndGameNotifications(*gin.Context, []Elo, []Elo) error
 	updateUStats([]UStat, []*Stats, []UID) []UStat
+	isCurrentPlayer(User) bool
 }
 
 func (cl Client[G, P]) gameDocRef(id string, rev int) *firestore.DocumentRef {
@@ -423,9 +423,7 @@ func (cl Client[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var g G
-	g = g.New()
-
+	g := newGame[G]()
 	id := getID(ctx)
 	snap, err := cl.gameDocRef(id, rev).Get(ctx)
 	if err != nil {
@@ -435,7 +433,7 @@ func (cl Client[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	if err := snap.DataTo(g); err != nil {
 		return g, err
 	}
-	g.Head().ID = id
+	g.getHeader().ID = id
 	return g, nil
 }
 
@@ -449,7 +447,7 @@ func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (
 	}
 
 	// if current user not current player, then simply return g which is committed game
-	if !g.IsCurrentPlayer(cu) {
+	if !g.isCurrentPlayer(cu) {
 		return g, nil
 	}
 
@@ -466,7 +464,7 @@ func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (
 		action[0](&undo)
 	}
 	if undo.Current == undo.Committed {
-		g.Head().Undo = undo
+		g.getHeader().Undo = undo
 		return g, nil
 	}
 
@@ -474,7 +472,7 @@ func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (
 	if err != nil {
 		return g, err
 	}
-	g.Head().Undo = undo
+	g.getHeader().Undo = undo
 	return g, nil
 }
 
@@ -482,8 +480,7 @@ func (cl Client[G, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) 
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var g G
-	g = g.New()
+	g := newGame[G]()
 	id := getID(ctx)
 	snap, err := cl.fullyCachedDocRef(id, rev, uid).Get(ctx)
 	if err != nil {
@@ -494,7 +491,7 @@ func (cl Client[G, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) 
 		return g, err
 	}
 
-	g.Head().ID = id
+	g.getHeader().ID = id
 	return g, nil
 }
 
@@ -506,8 +503,7 @@ func (cl Client[G, P]) GetCommitted(ctx *gin.Context) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var g G
-	g = g.New()
+	g := newGame[G]()
 	id := getID(ctx)
 	snap, err := cl.committedDocRef(id).Get(ctx)
 	if err != nil {
@@ -518,8 +514,13 @@ func (cl Client[G, P]) GetCommitted(ctx *gin.Context) (G, error) {
 		return g, err
 	}
 
-	g.Head().ID = id
+	g.getHeader().ID = id
 	return g, nil
+}
+
+func newGame[G Gamer[G]]() G {
+	var g G
+	return reflect.New(reflect.TypeOf(g).Elem()).Interface().(G)
 }
 
 func (cl Client[G, P]) putCached(ctx *gin.Context, g G, u User) error {
@@ -527,15 +528,15 @@ func (cl Client[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		if err := tx.Set(cl.fullyCachedDocRef(g.Head().ID, g.Head().Rev(), u.ID()), g); err != nil {
+		if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID()), g); err != nil {
 			return err
 		}
 
-		if err := tx.Set(cl.cachedDocRef(g.Head().ID, g.Head().Rev(), u.ID()), viewFor(g, u.ID())); err != nil {
+		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID()), viewFor(g, u.ID())); err != nil {
 			return err
 		}
 
-		return tx.Set(cl.StackDocRef(g.Head().ID, u.ID()), g.Head().Undo)
+		return tx.Set(cl.StackDocRef(g.getHeader().ID, u.ID()), g.getHeader().Undo)
 	})
 }
 
@@ -564,7 +565,7 @@ func (cl Client[G, P]) CachedHandler(action func(G, *gin.Context, User) error) g
 			JErr(ctx, err)
 			return
 		}
-		g.Head().Undo.Update()
+		g.getHeader().Undo.Update()
 
 		if err := cl.putCached(ctx, g, cu); err != nil {
 			JErr(ctx, err)
@@ -599,7 +600,7 @@ func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, 
 		cl.Log.Debugf("cp: %#v\nnp: %#v", cp, np)
 
 		cp.GetStats().Moves++
-		cp.GetStats().Think += time.Since(g.Head().UpdatedAt)
+		cp.GetStats().Think += time.Since(g.getHeader().UpdatedAt)
 
 		if np.GetPID() == NoPID {
 			cl.endGame(ctx, g, cu)
@@ -607,10 +608,10 @@ func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, 
 		}
 		np.Reset()
 		cl.Log.Debugf("cp.ID: %#v\nnp.ID: %#v", cp.GetPID(), np.GetPID())
-		cl.Log.Debugf("CPID: %#v", g.Head().CPIDS)
+		cl.Log.Debugf("CPID: %#v", g.getHeader().CPIDS)
 		g.SetCurrentPlayers(np)
 		cl.Log.Debugf("cp.ID: %#v\nnp.ID: %#v", cp.GetPID(), np.GetPID())
-		cl.Log.Debugf("CPID: %#v", g.Head().CPIDS)
+		cl.Log.Debugf("CPID: %#v", g.getHeader().CPIDS)
 
 		if err := cl.Commit(ctx, g, cu); err != nil {
 			JErr(ctx, err)
@@ -700,7 +701,7 @@ func (g *Game[P]) SetCurrentPlayers(ps ...Playerer) {
 	g.CPIDS = pie.Map(ps, func(p Playerer) PID { return p.GetPID() })
 }
 
-func (g Game[P]) IsCurrentPlayer(cu User) bool {
+func (g Game[P]) isCurrentPlayer(cu User) bool {
 	return g.CurrentPlayerFor(cu).GetPID() != NoPID
 }
 
@@ -776,23 +777,23 @@ func (cl Client[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 	defer cl.Log.Debugf(msgExit)
 
 	places := g.setFinishOrder()
-	g.Head().Status = Completed
-	g.Head().EndedAt = updateTime()
+	g.getHeader().Status = Completed
+	g.getHeader().EndedAt = updateTime()
 
-	stats, err := cl.GetUStats(ctx, maxPlayers, g.Head().UserIDS...)
+	stats, err := cl.GetUStats(ctx, maxPlayers, g.getHeader().UserIDS...)
 	if err != nil {
 		JErr(ctx, err)
 		return
 	}
 	stats = g.updateUStats(stats, g.playerStats(), g.playerUIDS())
 
-	oldElos, newElos, err := cl.UpdateElo(ctx, g.Head().UserIDS, places)
+	oldElos, newElos, err := cl.UpdateElo(ctx, g.getHeader().UserIDS, places)
 	if err != nil {
 		JErr(ctx, err)
 		return
 	}
 
-	g.Head().Undo.Commit()
+	g.getHeader().Undo.Commit()
 	err = cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
 		if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
 			return err
@@ -821,8 +822,8 @@ func (cl Client[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 const announceWinners Phase = "announce winners"
 
 func (g Game[P]) setFinishOrder() PlacesMap {
-	g.Head().Phase = announceWinners
-	g.Head().Status = Completed
+	g.getHeader().Phase = announceWinners
+	g.getHeader().Status = Completed
 
 	// Set to no current player
 	g.SetCurrentPlayers()

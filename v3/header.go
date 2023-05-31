@@ -41,7 +41,7 @@ type Header struct {
 	Private                   bool
 }
 
-func (h *Header) Head() *Header {
+func (h *Header) getHeader() *Header {
 	return h
 }
 
