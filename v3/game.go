@@ -25,7 +25,9 @@ const (
 	cachedKind    = "Cached"
 	viewKind      = "View"
 	committedKind = "Committed"
+	readKind      = "Read"
 	mlogKind      = "MLog"
+	messagesKind  = "Messages"
 )
 
 type Game[P Playerer] struct {
@@ -68,11 +70,11 @@ func (cl Client[G, P]) cachedCollectionRef(id string) *firestore.CollectionRef {
 }
 
 func (cl Client[G, P]) messageDocRef(gid, mid string) *firestore.DocumentRef {
-	return cl.messageCollectionRef(gid).Doc(mid)
+	return cl.messagesCollectionRef(gid).Doc(mid)
 }
 
-func (cl Client[G, P]) messageCollectionRef(id string) *firestore.CollectionRef {
-	return cl.committedDocRef(id).Collection(mlogKind)
+func (cl Client[G, P]) messagesCollectionRef(id string) *firestore.CollectionRef {
+	return cl.committedDocRef(id).Collection(messagesKind)
 }
 
 func (cl Client[G, P]) committedDocRef(id string) *firestore.DocumentRef {

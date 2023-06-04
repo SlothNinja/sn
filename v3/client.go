@@ -154,7 +154,7 @@ func (cl Client[G, P]) addRoutes(prefix string) Client[G, P] {
 	msg := cl.Router.Group(prefix + "/mlog")
 
 	// Update Read
-	msg.GET("/update/:id", cl.updateReadHandler())
+	msg.PUT("/updateRead/:id", cl.updateReadHandler())
 
 	// Add
 	msg.PUT("/add/:id", cl.addMessageHandler())

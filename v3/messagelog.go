@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // var ErrNotFound = errors.New("not found")
@@ -18,6 +17,7 @@ type Message struct {
 	CreatorName      string
 	CreatorEmailHash string
 	CreatorGravType  string
+	Read             []UID
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -30,6 +30,7 @@ func NewMessage(u User, text string) Message {
 		CreatorName:      u.Name,
 		CreatorEmailHash: u.EmailHash,
 		CreatorGravType:  u.GravType,
+		Read:             []UID{u.ID()},
 		CreatedAt:        t,
 		UpdatedAt:        t,
 	}
@@ -137,7 +138,9 @@ func (cl Client[G, P]) updateReadHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.updateRead(ctx, cu, read); err != nil {
+		Debugf("read: %#v", read)
+
+		if err := cl.updateRead(ctx, cu.ID(), read); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -145,58 +148,66 @@ func (cl Client[G, P]) updateReadHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) updateRead(ctx *gin.Context, u User, read int) error {
-	m, err := cl.getRead(ctx)
-	sid := fmt.Sprintf("%d", u.ID())
-	if status.Code(err) == codes.NotFound {
-		m = make(readMap)
-		m[sid] = 1
-	} else {
-		m[sid] += 1
+func (cl Client[G, P]) updateRead(ctx *gin.Context, uid UID, read []string) error {
+	for _, mid := range read {
+		if _, err := cl.messageDocRef(getID(ctx), mid).Update(ctx, []firestore.Update{
+			{Path: "Read", Value: firestore.ArrayUnion(uid)},
+		}); err != nil {
+			return err
+		}
 	}
-	_, err = cl.messageCollectionRef(getID(ctx)).Doc("Read").Set(ctx, m)
-	return err
+	return nil
+	// m, err := cl.getRead(ctx)
+	// sid := fmt.Sprintf("%d", u.ID())
+	// if status.Code(err) == codes.NotFound {
+	// 	m = make(readMap)
+	// 	m[sid] = 1
+	// } else {
+	// 	m[sid] += 1
+	// }
+	// _, err = cl.readDocRef(getID(ctx)).Set(ctx, m)
+	// return err
 }
 
-func (cl Client[G, P]) getRead(ctx *gin.Context) (readMap, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+// func (cl Client[G, P]) getRead(ctx *gin.Context) (readMap, error) {
+// 	cl.Log.Debugf(msgEnter)
+// 	defer cl.Log.Debugf(msgExit)
+//
+// 	snap, err := cl.readDocRef(getID(ctx)).Get(ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	m := make(readMap)
+// 	err = snap.DataTo(&m)
+// 	return m, err
+// }
 
-	snap, err := cl.messageCollectionRef(getID(ctx)).Doc("Read").Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	m := make(readMap)
-	err = snap.DataTo(&m)
-	return m, err
-}
-
-func getRead(ctx *gin.Context) (int, error) {
+func getRead(ctx *gin.Context) ([]string, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	var obj struct {
-		Read int `json:"message"`
+		Read []string
 	}
 	err := ctx.ShouldBind(&obj)
 	return obj.Read, err
 }
 
-func getMessage(ctx *gin.Context) (m Message, r int, err error) {
+func getMessage(ctx *gin.Context) (Message, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	var obj struct {
-		Text    string `json:"text"`
-		Creator User   `json:"creator"`
-		Read    int    `json:"read"`
+		Text    string   `json:"text"`
+		Creator User     `json:"creator"`
+		Read    []string `json:"read"`
 	}
 
-	if err = ctx.ShouldBind(&obj); err != nil {
-		return m, r, err
+	if err := ctx.ShouldBind(&obj); err != nil {
+		return Message{}, err
 	}
-	return NewMessage(obj.Creator, obj.Text), obj.Read, nil
+	return NewMessage(obj.Creator, obj.Text), nil
 }
 
 // func (cl MLogClient) Unread(c *gin.Context, id int64, u User) (int, error) {
@@ -283,13 +294,13 @@ func (cl Client[G, P]) addMessageHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		m, read, err := cl.validateAddMessage(ctx)
+		m, err := cl.validateAddMessage(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		if err := cl.addMessage(ctx, m, read); err != nil {
+		if err := cl.addMessage(ctx, m); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -297,45 +308,46 @@ func (cl Client[G, P]) addMessageHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) validateAddMessage(ctx *gin.Context) (Message, int, error) {
+func (cl Client[G, P]) validateAddMessage(ctx *gin.Context) (Message, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	cu, err := cl.Current(ctx)
 	if err != nil {
-		return Message{}, -1, err
+		return Message{}, err
 	}
 
-	m, read, err := getMessage(ctx)
+	m, err := getMessage(ctx)
 	if err != nil {
-		return Message{}, -1, err
+		return Message{}, err
 	}
 
 	if m.CreatorID != cu.ID() {
-		return Message{}, -1, fmt.Errorf("invalid creator: %w", ErrValidation)
+		return Message{}, fmt.Errorf("invalid creator: %w", ErrValidation)
 	}
-	return m, read, nil
+	return m, nil
 }
 
-func (cl Client[G, P]) addMessage(ctx *gin.Context, m Message, read int) error {
+func (cl Client[G, P]) addMessage(ctx *gin.Context, m Message) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	gid := getID(ctx)
-	_, err := cl.messageCollectionRef(gid).NewDoc().Create(ctx, m)
-
-	r, err := cl.getRead(ctx)
-	sid := fmt.Sprintf("%d", m.CreatorID)
-	if status.Code(err) == codes.NotFound {
-		r = make(readMap)
-		r[sid] = 1
-	} else {
-		r[sid] += 1
-	}
-	_, err = cl.messageCollectionRef(gid).Doc("Read").Set(ctx, r)
+	_, err := cl.messagesCollectionRef(getID(ctx)).NewDoc().Create(ctx, m)
 	return err
 }
 
-func readPath(uid UID) string {
-	return fmt.Sprintf("Read.%d", uid)
-}
+// func (cl Client[G, P]) createMLog(ctx *gin.Context) error {
+// 	_, err := cl.mlogDocRef(getID(ctx)).Get(ctx)
+// 	if err == nil {
+// 		return nil
+// 	}
+// 	if status.Code(err) != codes.NotFound {
+// 		return err
+// 	}
+// 	_, err = cl.mlogDocRef(getID(ctx)).Create(ctx, nil)
+// 	return err
+// }
+
+// func readPath(uid UID) string {
+// 	return fmt.Sprintf("Read.%d", uid)
+// }
