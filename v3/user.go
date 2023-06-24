@@ -43,7 +43,7 @@ type Data struct {
 
 type readMap map[string]int
 
-func (cl Client[G, P]) CuHandler() gin.HandlerFunc {
+func (cl Client[G, P]) cuHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)

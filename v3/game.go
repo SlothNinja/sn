@@ -211,7 +211,7 @@ const (
 	hParam  = "hid"
 )
 
-func (cl Client[G, P]) ResetHandler() gin.HandlerFunc {
+func (cl Client[G, P]) resetHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -244,7 +244,7 @@ var NoUndo stackFunc = func(s *Stack) bool { return false }
 var Undo stackFunc = (*Stack).Undo
 var Redo stackFunc = (*Stack).Redo
 
-func (cl Client[G, P]) UndoHandler() gin.HandlerFunc {
+func (cl Client[G, P]) undoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -285,7 +285,7 @@ func (cl Client[G, P]) UndoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) RedoHandler() gin.HandlerFunc {
+func (cl Client[G, P]) redoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -326,7 +326,34 @@ func (cl Client[G, P]) RedoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) RollbackHandler() gin.HandlerFunc {
+func (cl Client[G, P]) abandonHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		cl.Log.Debugf(msgEnter)
+		defer cl.Log.Debugf(msgExit)
+
+		cu, err := cl.RequireAdmin(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		g, err := cl.GetCommitted(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		g.getHeader().Status = Abandoned
+		if err := cl.Save(ctx, g, cu); err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		ctx.JSON(http.StatusOK, nil)
+	}
+}
+
+func (cl Client[G, P]) rollbackHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -368,7 +395,7 @@ func (cl Client[G, P]) RollbackHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) RollforwardHandler() gin.HandlerFunc {
+func (cl Client[G, P]) rollforwardHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)

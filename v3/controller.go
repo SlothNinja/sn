@@ -36,9 +36,27 @@ func VersionID() string {
 }
 
 func (cl Client[G, P]) RequireLogin(ctx *gin.Context) (u User, err error) {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
 	if u, err = cl.Current(ctx); err != nil {
 		return u, fmt.Errorf("must login to access resource: %w", err)
 	}
+	return u, nil
+}
+
+func (cl Client[G, P]) RequireAdmin(ctx *gin.Context) (u User, err error) {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	if u, err = cl.RequireLogin(ctx); err != nil {
+		return u, err
+	}
+
+	if err = ValidateAdmin(u); err != nil {
+		return u, fmt.Errorf("must be admin access resource: %w", err)
+	}
+
 	return u, nil
 }
 

@@ -40,6 +40,33 @@ func (cl Client[G, P]) hashDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationDocRef(id).Collection(hashKind).Doc("hash")
 }
 
+func (cl Client[G, P]) abortHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		cl.Log.Debugf(msgEnter)
+		defer cl.Log.Debugf(msgExit)
+
+		if _, err := cl.RequireAdmin(ctx); err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		inv, err := cl.getInvitation(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		inv.Status = Aborted
+		inv.UpdatedAt = updateTime()
+		if _, err := cl.invitationDocRef(inv.ID).Set(ctx, inv); err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		ctx.JSON(http.StatusOK, nil)
+	}
+}
+
 func (cl Client[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
@@ -226,8 +253,8 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 		}
 
 		var hash []byte
-		if inv.getHeader().Private {
-			hash, err = cl.getHash(ctx, inv.getHeader().ID)
+		if inv.Private {
+			hash, err = cl.getHash(ctx, inv.ID)
 			if err != nil {
 				JErr(ctx, err)
 				return
@@ -244,25 +271,25 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		start, err := inv.getHeader().AcceptWith(cu, []byte(obj.Password), hash)
+		start, err := inv.AcceptWith(cu, []byte(obj.Password), hash)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		if !start {
-			inv.getHeader().UpdatedAt = updateTime()
-			_, err = cl.invitationDocRef(inv.getHeader().ID).Set(ctx, inv)
+			inv.UpdatedAt = updateTime()
+			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 			if err != nil {
 				JErr(ctx, err)
 				return
 			}
-			ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().acceptGameMessage(cu)})
+			ctx.JSON(http.StatusOK, gin.H{"Message": inv.acceptGameMessage(cu)})
 			return
 		}
 
 		g := newGame[G]()
-		cp := g.Start(inv.getHeader())
+		cp := g.Start(&(inv.Header))
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -273,7 +300,7 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 			if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
 				return err
 			}
-			return cl.deleteInvitationIn(ctx, tx, inv.getHeader().ID)
+			return cl.deleteInvitationIn(ctx, tx, inv.ID)
 		}); err != nil {
 			JErr(ctx, err)
 			return
@@ -285,7 +312,7 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 		// 		cl.Log.Warningf(err.Error())
 		// 	}
 		//
-		ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().startGameMessage(cp.GetPID())})
+		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cp.GetPID())})
 	}
 }
 
@@ -315,25 +342,25 @@ func (cl Client[G, P]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = inv.getHeader().Drop(cu)
+		err = inv.Drop(cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		Debugf("ID: %#v", inv.getHeader().ID)
-		if len(inv.getHeader().UserIDS) != 0 {
-			inv.getHeader().UpdatedAt = updateTime()
-			_, err = cl.invitationDocRef(inv.getHeader().ID).Set(ctx, inv)
+		Debugf("ID: %#v", inv.ID)
+		if len(inv.UserIDS) != 0 {
+			inv.UpdatedAt = updateTime()
+			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 		} else {
-			err = cl.deleteInvitation(ctx, inv.getHeader().ID)
+			err = cl.deleteInvitation(ctx, inv.ID)
 		}
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		ctx.JSON(http.StatusOK, gin.H{"Message": inv.getHeader().dropGameMessage(cu)})
+		ctx.JSON(http.StatusOK, gin.H{"Message": inv.dropGameMessage(cu)})
 	}
 }
 

@@ -112,42 +112,47 @@ func (cl Client[G, P]) addRoutes(prefix string) Client[G, P] {
 	iGroup.PUT("/drop/:id", cl.dropHandler())
 
 	// // Accept
-	// // inv.PUT("/accept/:id", cl.acceptHandler)
 	iGroup.PUT("/accept/:id", cl.acceptHandler())
 
 	// // Details
 	iGroup.GET("/details/:id", cl.detailsHandler())
+
+	// Abort
+	iGroup.PUT("abort/:id", cl.abortHandler())
 
 	/////////////////////////////////////////////
 	// Game Group
 	gGroup := cl.Router.Group(prefix + "/game")
 
 	// Reset
-	gGroup.PUT("reset/:id", cl.ResetHandler())
+	gGroup.PUT("reset/:id", cl.resetHandler())
 
 	// Undo
-	gGroup.PUT("undo/:id", cl.UndoHandler())
+	gGroup.PUT("undo/:id", cl.undoHandler())
 
 	// Redo
-	gGroup.PUT("redo/:id", cl.RedoHandler())
+	gGroup.PUT("redo/:id", cl.redoHandler())
 
 	// Rollback
-	gGroup.PUT("rollback/:id", cl.RollbackHandler())
+	gGroup.PUT("rollback/:id", cl.rollbackHandler())
 
 	// Rollforward
-	gGroup.PUT("rollforward/:id", cl.RollforwardHandler())
+	gGroup.PUT("rollforward/:id", cl.rollforwardHandler())
+
+	// Abandon
+	gGroup.PUT("abandon/:id", cl.abandonHandler())
 
 	/////////////////////////////////////////////
 	// Login/Logout
 	// login
-	cl.Router.GET(prefix+"/login", cl.LoginHandler())
+	cl.Router.GET(prefix+"/login", cl.loginHandler())
 	//
 	// logout
-	cl.Router.GET(prefix+"/logout", cl.LogoutHandler())
+	cl.Router.GET(prefix+"/logout", cl.logoutHandler())
 
 	/////////////////////////////////////////////
 	// Current User
-	cl.Router.GET(prefix+"/cu", cl.CuHandler())
+	cl.Router.GET(prefix+"/cu", cl.cuHandler())
 
 	/////////////////////////////////////////////
 	// Message Log

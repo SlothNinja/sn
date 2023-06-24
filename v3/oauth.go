@@ -471,7 +471,7 @@ func nameFrom(s sessions.Session) (string, error) {
 	return name, nil
 }
 
-func (cl Client[G, P]) LoginHandler() gin.HandlerFunc {
+func (cl Client[G, P]) loginHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -485,7 +485,7 @@ func (cl Client[G, P]) LoginHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) LogoutHandler() gin.HandlerFunc {
+func (cl Client[G, P]) logoutHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
