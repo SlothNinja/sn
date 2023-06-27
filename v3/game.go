@@ -699,7 +699,7 @@ func (ps Players[P]) PIDS() []PID {
 	return pie.Map(ps, func(p P) PID { return p.GetPID() })
 }
 
-func (g Game[P]) RandomizePlayers() {
+func (g *Game[P]) RandomizePlayers() {
 	g.Players = pie.Shuffle(g.Players, myRandomSource)
 	g.UpdateOrder()
 }
@@ -850,7 +850,7 @@ func (cl Client[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 
 const announceWinners Phase = "announce winners"
 
-func (g Game[P]) setFinishOrder() PlacesMap {
+func (g *Game[P]) setFinishOrder() PlacesMap {
 	g.getHeader().Phase = announceWinners
 	g.getHeader().Status = Completed
 
@@ -900,13 +900,13 @@ type result struct {
 }
 
 // reflect player order game state to header
-func (g Game[P]) UpdateOrder() {
+func (g *Game[P]) UpdateOrder() {
 	g.OrderIDS = pie.Map(g.Players, func(p P) PID { return p.GetPID() })
 }
 
 type results []result
 
-func (g Game[P]) sendEndGameNotifications(ctx *gin.Context, oldElos, newElos []Elo) error {
+func (g *Game[P]) sendEndGameNotifications(ctx *gin.Context, oldElos, newElos []Elo) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
