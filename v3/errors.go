@@ -20,13 +20,13 @@ var (
 	ErrInvalidCache       = errors.New("invalid cache value")
 )
 
-func JErr(c *gin.Context, err error) {
+func JErr(ctx *gin.Context, err error) {
 	Debugf(err.Error())
 	if errors.Is(err, ErrValidation) {
-		c.JSON(http.StatusOK, gin.H{"Message": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"Message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusBadRequest, gin.H{"Message": ErrUnexpected.Error()})
+	ctx.JSON(http.StatusBadRequest, gin.H{"Message": ErrUnexpected.Error()})
 }
 
 func singleError(err error) error {

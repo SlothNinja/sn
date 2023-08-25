@@ -1,26 +1,72 @@
 package sn
 
-// type Entryer interface {
-// 	Init(Gamer)
-// 	PhaseName() string
-// 	Turn() int
-// 	Round() int
-// 	Player() Playerer
-// 	CreatedAt() time.Time
-// 	HTML() template.HTML
-// }
+type entry struct {
+	Data  Entry
+	Lines []line
+}
+
+type line struct {
+	Template string
+	Data     Line
+}
+
+type glog []entry
+
+//	type Entryer interface {
+//		Init(Gamer)
+//		PhaseName() string
+//		Turn() int
+//		Round() int
+//		Player() Playerer
+//		CreatedAt() time.Time
+//		HTML() template.HTML
+//	}
 //
-// type Entry struct {
-// 	gamer         Gamer
-// 	PlayerID      PID
-// 	OtherPlayerID PID
-// 	TurnF         int
-// 	PhaseF        Phase
-// 	SubPhaseF     SubPhase
-// 	RoundF        int
-// 	CreatedAtF    time.Time
-// }
-//
+//	type Entry struct {
+//		gamer         Gamer
+//		PlayerID      PID
+//		OtherPlayerID PID
+//		TurnF         int
+//		PhaseF        Phase
+//		SubPhaseF     SubPhase
+//		RoundF        int
+//		CreatedAtF    time.Time
+//	}
+
+type Entry map[string]any
+type Line map[string]any
+
+func (g *Game[P]) NewEntry(template string, e Entry, l Line) {
+	g.Log = append(g.Log, entry{
+		Data:  e,
+		Lines: []line{line{Template: template, Data: l}},
+	})
+}
+
+func (g *Game[P]) AppendEntry(template string, l Line) {
+	if lastIndex := len(g.Log) - 1; lastIndex >= 0 {
+		g.Log[lastIndex].Lines = append(g.Log[lastIndex].Lines, line{Template: template, Data: l})
+		return
+	}
+	Warningf("no log entry to append to")
+}
+
+func (g *Game[P]) AppendLine(l Line) {
+	lastEntryIndex := len(g.Log) - 1
+	if lastEntryIndex < 0 {
+		Warningf("no log line to append to")
+		return
+	}
+	lastLineIndex := len(g.Log[lastEntryIndex].Lines) - 1
+	if lastLineIndex < 0 {
+		Warningf("no log line to append to")
+		return
+	}
+	for k, v := range l {
+		g.Log[lastEntryIndex].Lines[lastLineIndex].Data[k] = v
+	}
+}
+
 // func NewEntry(g Gamer) *Entry {
 // 	h := g.GetHeader()
 // 	return &Entry{

@@ -15,7 +15,7 @@ type Player struct {
 	Stats
 }
 
-func (p Player) GetPID() PID {
+func (p Player) getPID() PID {
 	return p.ID
 }
 
@@ -23,34 +23,34 @@ func (p *Player) setPID(pid PID) {
 	p.ID = pid
 }
 
-func (p Player) GetPassed() bool {
+func (p Player) getPassed() bool {
 	return p.Passed
 }
 
-func (p Player) GetPerformedAction() bool {
+func (p Player) getPerformedAction() bool {
 	return p.PerformedAction
 }
 
-func (p Player) GetStats() *Stats {
+func (p Player) getStats() *Stats {
 	return &(p.Stats)
 }
 
-func (p *Player) Reset() {
+func (p *Player) reset() {
 	p.PerformedAction = false
 	p.Passed = false
 }
 
 type Playerer interface {
-	GetPID() PID
-	GetPassed() bool
-	GetPerformedAction() bool
-	GetStats() *Stats
-	Reset()
 	Copy() Playerer
-
-	compareByScore(Playerer) Comparison
 	New() Playerer
+
+	getPID() PID
 	setPID(PID)
+	getPassed() bool
+	getPerformedAction() bool
+	getStats() *Stats
+	reset()
+	compareByScore(Playerer) Comparison
 }
 
 type Players[P Playerer] []P
@@ -119,9 +119,9 @@ func sortedByScore[P Playerer](ps []P, c Comparison) {
 
 func (p Player) compareByScore(p2 Playerer) Comparison {
 	switch {
-	case p.Score < p2.GetStats().Score:
+	case p.Score < p2.getStats().Score:
 		return LessThan
-	case p.Score > p2.GetStats().Score:
+	case p.Score > p2.getStats().Score:
 		return GreaterThan
 	default:
 		return EqualTo
@@ -138,9 +138,9 @@ func (g Game[P]) determinePlaces() (Results, error) {
 		// Find all players tied at place
 		found := pie.Filter(ps, func(p P) bool { return ps[0].compareByScore(p) == EqualTo })
 		// Get user keys for found players
-		rs[place] = pie.Map(found, func(p P) *datastore.Key { return g.UserKeyFor(p.GetPID()) })
+		rs[place] = pie.Map(found, func(p P) *datastore.Key { return g.UserKeyFor(p.getPID()) })
 		// Set ps to remaining players
-		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.GetPID() == p2.GetPID() })
+		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.getPID() == p2.getPID() })
 		// Above does not guaranty order so sort
 		sortedByScore(ps, Descending)
 		// Increase place by number of players added to current place

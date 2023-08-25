@@ -28,19 +28,19 @@ func updateTime() (t time.Time) { return }
 
 type Invitation struct{ Header }
 
-func (cl Client[G, P]) invitationDocRef(id string) *firestore.DocumentRef {
+func (cl GameClient[G, P]) invitationDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationCollectionRef().Doc(id)
 }
 
-func (cl Client[G, P]) invitationCollectionRef() *firestore.CollectionRef {
+func (cl GameClient[G, P]) invitationCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(invitationKind)
 }
 
-func (cl Client[G, P]) hashDocRef(id string) *firestore.DocumentRef {
+func (cl GameClient[G, P]) hashDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationDocRef(id).Collection(hashKind).Doc("hash")
 }
 
-func (cl Client[G, P]) abortHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) abortHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -67,7 +67,7 @@ func (cl Client[G, P]) abortHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
+func (cl GameClient[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -87,7 +87,7 @@ func (cl Client[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	return inv, nil
 }
 
-func (cl Client[G, P]) getHash(ctx context.Context, id string) ([]byte, error) {
+func (cl GameClient[G, P]) getHash(ctx context.Context, id string) ([]byte, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -108,13 +108,13 @@ func (cl Client[G, P]) getHash(ctx context.Context, id string) ([]byte, error) {
 	return hash, nil
 }
 
-func (cl Client[G, P]) deleteInvitation(ctx context.Context, id string) error {
+func (cl GameClient[G, P]) deleteInvitation(ctx context.Context, id string) error {
 	return cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		return cl.deleteInvitationIn(ctx, tx, id)
 	})
 }
 
-func (cl Client[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
+func (cl GameClient[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
 	ref := cl.invitationDocRef(id)
 	if err := tx.Delete(ref); err != nil {
 		return err
@@ -126,7 +126,7 @@ func (cl Client[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Tra
 	return nil
 }
 
-func (cl Client[G, P]) newInvitationHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -138,12 +138,12 @@ func (cl Client[G, P]) newInvitationHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) createInvitationHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -235,12 +235,12 @@ func FromForm(ctx *gin.Context, cu User) (Invitation, []byte, error) {
 	return inv, hash, nil
 }
 
-func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -312,7 +312,7 @@ func (cl Client[G, P]) acceptHandler() gin.HandlerFunc {
 		// 		cl.Log.Warningf(err.Error())
 		// 	}
 		//
-		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cp.GetPID())})
+		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cp.getPID())})
 	}
 }
 
@@ -325,7 +325,7 @@ func (h Header) startGameMessage(pid PID) string {
 		h.Title, h.NameFor(pid))
 }
 
-func (cl Client[G, P]) dropHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -336,7 +336,7 @@ func (cl Client[G, P]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -368,7 +368,7 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl Client[G, P]) Commit(ctx context.Context, g G, cu User) error {
+func (cl GameClient[G, P]) Commit(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -376,7 +376,7 @@ func (cl Client[G, P]) Commit(ctx context.Context, g G, cu User) error {
 	return cl.Save(ctx, g, cu)
 }
 
-func (cl Client[G, P]) Save(ctx context.Context, g G, u User) error {
+func (cl GameClient[G, P]) Save(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -385,7 +385,7 @@ func (cl Client[G, P]) Save(ctx context.Context, g G, u User) error {
 	})
 }
 
-func (cl Client[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
+func (cl GameClient[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -409,7 +409,7 @@ func (cl Client[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction
 	return cl.clearCached(ctx, g, cu)
 }
 
-func (cl Client[G, P]) clearCached(ctx context.Context, g G, cu User) error {
+func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -455,7 +455,7 @@ type detail struct {
 	WP     float32
 }
 
-func (cl Client[G, P]) detailsHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) detailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -466,7 +466,7 @@ func (cl Client[G, P]) detailsHandler() gin.HandlerFunc {
 			return
 		}
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return

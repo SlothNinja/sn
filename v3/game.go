@@ -33,6 +33,7 @@ const (
 type Game[P Playerer] struct {
 	Header
 	Players Players[P]
+	Log     glog
 }
 
 type Gamer[G any] interface {
@@ -49,39 +50,39 @@ type Gamer[G any] interface {
 	isCurrentPlayer(User) bool
 }
 
-func (cl Client[G, P]) gameDocRef(id string, rev int) *firestore.DocumentRef {
+func (cl GameClient[G, P]) gameDocRef(id string, rev int) *firestore.DocumentRef {
 	return cl.gameCollectionRef().Doc(fmt.Sprintf("%s-%d", id, rev))
 }
 
-func (cl Client[G, P]) gameCollectionRef() *firestore.CollectionRef {
+func (cl GameClient[G, P]) gameCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(gameKind)
 }
 
-func (cl Client[G, P]) cachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl GameClient[G, P]) cachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d", rev, uid))
 }
 
-func (cl Client[G, P]) fullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl GameClient[G, P]) fullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d-0", rev, uid))
 }
 
-func (cl Client[G, P]) cachedCollectionRef(id string) *firestore.CollectionRef {
+func (cl GameClient[G, P]) cachedCollectionRef(id string) *firestore.CollectionRef {
 	return cl.committedDocRef(id).Collection(cachedKind)
 }
 
-func (cl Client[G, P]) messageDocRef(gid, mid string) *firestore.DocumentRef {
+func (cl GameClient[G, P]) messageDocRef(gid, mid string) *firestore.DocumentRef {
 	return cl.messagesCollectionRef(gid).Doc(mid)
 }
 
-func (cl Client[G, P]) messagesCollectionRef(id string) *firestore.CollectionRef {
+func (cl GameClient[G, P]) messagesCollectionRef(id string) *firestore.CollectionRef {
 	return cl.committedDocRef(id).Collection(messagesKind)
 }
 
-func (cl Client[G, P]) committedDocRef(id string) *firestore.DocumentRef {
+func (cl GameClient[G, P]) committedDocRef(id string) *firestore.DocumentRef {
 	return cl.FS.Collection(committedKind).Doc(id)
 }
 
-func (cl Client[G, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef {
+func (cl GameClient[G, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef {
 	return cl.committedDocRef(id).Collection(viewKind).Doc(fmt.Sprintf("%d", uid))
 }
 
@@ -211,18 +212,18 @@ const (
 	hParam  = "hid"
 )
 
-func (cl Client[G, P]) resetHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) resetHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		g, err := cl.GetCommitted(ctx)
+		g, err := cl.getCommitted(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -244,13 +245,13 @@ var NoUndo stackFunc = func(s *Stack) bool { return false }
 var Undo stackFunc = (*Stack).Undo
 var Redo stackFunc = (*Stack).Redo
 
-func (cl Client[G, P]) undoHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) undoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
 		id := getID(ctx)
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -285,13 +286,13 @@ func (cl Client[G, P]) undoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) redoHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) redoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
 		id := getID(ctx)
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -326,7 +327,7 @@ func (cl Client[G, P]) redoHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) abandonHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) abandonHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -337,7 +338,7 @@ func (cl Client[G, P]) abandonHandler() gin.HandlerFunc {
 			return
 		}
 
-		g, err := cl.GetCommitted(ctx)
+		g, err := cl.getCommitted(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -353,12 +354,12 @@ func (cl Client[G, P]) abandonHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) rollbackHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) rollbackHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -395,12 +396,12 @@ func (cl Client[G, P]) rollbackHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl Client[G, P]) rollforwardHandler() gin.HandlerFunc {
+func (cl GameClient[G, P]) rollforwardHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.RequireLogin(ctx)
+		cu, err := cl.requireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -448,7 +449,7 @@ func ValidateAdmin(cu User) error {
 	return errors.New("not admin")
 }
 
-func (cl Client[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
+func (cl GameClient[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -466,11 +467,11 @@ func (cl Client[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
 	return g, nil
 }
 
-func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
+func (cl GameClient[G, P]) getGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g, err := cl.GetCommitted(ctx)
+	g, err := cl.getCommitted(ctx)
 	if err != nil {
 		return g, err
 	}
@@ -480,7 +481,7 @@ func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (
 		return g, nil
 	}
 
-	undo, err := cl.GetStack(ctx, cu.ID())
+	undo, err := cl.getStack(ctx, cu.ID())
 	// if undo stack not found, then simply return g which is committed game
 	if status.Code(err) == codes.NotFound {
 		return g, nil
@@ -505,7 +506,7 @@ func (cl Client[G, P]) GetGame(ctx *gin.Context, cu User, action ...stackFunc) (
 	return g, nil
 }
 
-func (cl Client[G, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
+func (cl GameClient[G, P]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -528,7 +529,7 @@ const (
 	cachedRootKind = "CachedRoot"
 )
 
-func (cl Client[G, P]) GetCommitted(ctx *gin.Context) (G, error) {
+func (cl GameClient[G, P]) getCommitted(ctx *gin.Context) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -552,7 +553,7 @@ func newGame[G Gamer[G]]() G {
 	return reflect.New(reflect.TypeOf(g).Elem()).Interface().(G)
 }
 
-func (cl Client[G, P]) putCached(ctx *gin.Context, g G, u User) error {
+func (cl GameClient[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -574,17 +575,17 @@ func viewFor[G Gamer[G]](g G, uid1 UID) G {
 	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
 }
 
-func (cl Client[G, P]) CachedHandler(action func(G, *gin.Context, User) error) gin.HandlerFunc {
+func (cl GameClient[G, P]) CachedHandler(action func(G, *gin.Context, User) error) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.Current(ctx)
+		cu, err := cl.currentUser(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
 
-		g, err := cl.GetGame(ctx, cu)
+		g, err := cl.getGame(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -605,17 +606,17 @@ func (cl Client[G, P]) CachedHandler(action func(G, *gin.Context, User) error) g
 	}
 }
 
-func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, P, error)) gin.HandlerFunc {
+func (cl GameClient[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, P, error)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.Current(ctx)
+		cu, err := cl.currentUser(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
 
-		g, err := cl.GetGame(ctx, cu)
+		g, err := cl.getGame(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -626,21 +627,16 @@ func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, 
 			JErr(ctx, err)
 			return
 		}
-		cl.Log.Debugf("cp: %#v\nnp: %#v", cp, np)
 
-		cp.GetStats().Moves++
-		cp.GetStats().Think += time.Since(g.getHeader().UpdatedAt)
+		cp.getStats().Moves++
+		cp.getStats().Think += time.Since(g.getHeader().UpdatedAt)
 
-		if np.GetPID() == NoPID {
+		if np.getPID() == NoPID {
 			cl.endGame(ctx, g, cu)
 			return
 		}
-		np.Reset()
-		cl.Log.Debugf("cp.ID: %#v\nnp.ID: %#v", cp.GetPID(), np.GetPID())
-		cl.Log.Debugf("CPID: %#v", g.getHeader().CPIDS)
+		np.reset()
 		g.SetCurrentPlayers(np)
-		cl.Log.Debugf("cp.ID: %#v\nnp.ID: %#v", cp.GetPID(), np.GetPID())
-		cl.Log.Debugf("CPID: %#v", g.getHeader().CPIDS)
 
 		if err := cl.Commit(ctx, g, cu); err != nil {
 			JErr(ctx, err)
@@ -652,7 +648,7 @@ func (cl Client[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) (P, 
 }
 
 func (g Game[P]) playerUIDS() []UID {
-	return pie.Map(g.Players, func(p P) UID { return g.UserIDS[p.GetPID().ToIndex()] })
+	return pie.Map(g.Players, func(p P) UID { return g.UserIDS[p.getPID().ToIndex()] })
 }
 
 func (g Game[P]) UIDForPID(pid PID) UID {
@@ -661,7 +657,7 @@ func (g Game[P]) UIDForPID(pid PID) UID {
 
 func (g Game[P]) PlayerByPID(pid PID) P {
 	const notFound = -1
-	index := pie.FindFirstUsing(g.Players, func(p P) bool { return p.GetPID() == pid })
+	index := pie.FindFirstUsing(g.Players, func(p P) bool { return p.getPID() == pid })
 	if index == notFound {
 		var zerop P
 		return zerop
@@ -677,7 +673,7 @@ func (g Game[P]) PlayerByUID(uid UID) P {
 // IndexForPlayer returns the index for the player and bool indicating whether player found.
 // if not found, returns -1
 func (g Game[P]) IndexForPlayer(p1 P) int {
-	return pie.FindFirstUsing(g.Players, func(p2 P) bool { return p1.GetPID() == p2.GetPID() })
+	return pie.FindFirstUsing(g.Players, func(p2 P) bool { return p1.getPID() == p2.getPID() })
 }
 
 // treats Players as a circular buffer, thus permitting indices larger than length and indices less than 0
@@ -696,7 +692,7 @@ func (g Game[P]) PlayerByIndex(i int) P {
 }
 
 func (ps Players[P]) PIDS() []PID {
-	return pie.Map(ps, func(p P) PID { return p.GetPID() })
+	return pie.Map(ps, func(p P) PID { return p.getPID() })
 }
 
 func (g *Game[P]) RandomizePlayers() {
@@ -727,11 +723,11 @@ func (g Game[P]) CurrentPlayerFor(u User) P {
 }
 
 func (g *Game[P]) SetCurrentPlayers(ps ...Playerer) {
-	g.CPIDS = pie.Map(ps, func(p Playerer) PID { return p.GetPID() })
+	g.CPIDS = pie.Map(ps, func(p Playerer) PID { return p.getPID() })
 }
 
 func (g Game[P]) isCurrentPlayer(cu User) bool {
-	return g.CurrentPlayerFor(cu).GetPID() != NoPID
+	return g.CurrentPlayerFor(cu).getPID() != NoPID
 }
 
 func (g Game[P]) copyPlayers() []P {
@@ -746,7 +742,7 @@ func (g Game[P]) ValidatePlayerAction(cu User) (P, error) {
 	switch {
 	case err != nil:
 		return cp, err
-	case cp.GetPerformedAction():
+	case cp.getPerformedAction():
 		return cp, fmt.Errorf("current player already performed action: %w", ErrValidation)
 	default:
 		return cp, nil
@@ -758,14 +754,14 @@ func (g Game[P]) ValidateCurrentPlayer(cu User) (P, error) {
 	defer Debugf(msgExit)
 
 	cp := g.CurrentPlayerFor(cu)
-	if cp.GetPID() == NoPID {
+	if cp.getPID() == NoPID {
 		return cp, ErrPlayerNotFound
 	}
 	return cp, nil
 }
 
 func (g Game[P]) playerStats() []*Stats {
-	return pie.Map(g.Players, func(p P) *Stats { return p.GetStats() })
+	return pie.Map(g.Players, func(p P) *Stats { return p.getStats() })
 }
 
 func (g Game[P]) UIDSForPIDS(pids []PID) []UID {
@@ -801,7 +797,7 @@ func (g Game[P]) NextPlayer(cp P, ts ...func(P) bool) P {
 
 const maxPlayers = 6
 
-func (cl Client[G, P]) endGame(ctx *gin.Context, g G, cu User) {
+func (cl GameClient[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -863,8 +859,8 @@ func (g *Game[P]) setFinishOrder() PlacesMap {
 	places := make(PlacesMap, len(g.Players))
 	for i, p1 := range g.Players {
 		// Update player stats
-		p1.GetStats().Finish = place
-		uid1 := g.UIDForPID(p1.GetPID())
+		p1.getStats().Finish = place
+		uid1 := g.UIDForPID(p1.getPID())
 		places[uid1] = place
 
 		// Update Winners
@@ -901,7 +897,7 @@ type result struct {
 
 // reflect player order game state to header
 func (g *Game[P]) UpdateOrder() {
-	g.OrderIDS = pie.Map(g.Players, func(p P) PID { return p.GetPID() })
+	g.OrderIDS = pie.Map(g.Players, func(p P) PID { return p.getPID() })
 }
 
 type results []result
@@ -915,10 +911,10 @@ func (g *Game[P]) sendEndGameNotifications(ctx *gin.Context, oldElos, newElos []
 
 	for i, p := range g.Players {
 		rs[i] = result{
-			Place:  p.GetStats().Finish,
+			Place:  p.getStats().Finish,
 			Rating: newElos[i].Rating,
-			Score:  p.GetStats().Score,
-			Name:   g.NameFor(p.GetPID()),
+			Score:  p.getStats().Score,
+			Name:   g.NameFor(p.getPID()),
 			Inc:    fmt.Sprintf("%+d", newElos[i].Rating-oldElos[i].Rating),
 		}
 	}
@@ -966,8 +962,8 @@ func (g *Game[P]) sendEndGameNotifications(ctx *gin.Context, oldElos, newElos []
 			},
 			To: &mailjet.RecipientsV31{
 				mailjet.RecipientV31{
-					Email: g.EmailFor(p.GetPID()),
-					Name:  g.NameFor(p.GetPID()),
+					Email: g.EmailFor(p.getPID()),
+					Name:  g.NameFor(p.getPID()),
 				},
 			},
 			Subject:  subject,
@@ -979,7 +975,7 @@ func (g *Game[P]) sendEndGameNotifications(ctx *gin.Context, oldElos, newElos []
 }
 
 func (g Game[P]) winnerNames() []string {
-	return pie.Map(g.WinnerIDS, func(uid UID) string { return g.NameFor(g.PlayerByUID(uid).GetPID()) })
+	return pie.Map(g.WinnerIDS, func(uid UID) string { return g.NameFor(g.PlayerByUID(uid).getPID()) })
 }
 
 func (g *Game[P]) addNewPlayers() {
@@ -994,9 +990,7 @@ func (g Game[P]) newPlayer(i int) P {
 	defer Debugf(msgExit)
 
 	var p P
-	Debugf("p: %#v", p)
 	p2 := p.New()
-	Debugf("p2: %#v", p2)
 	p2.setPID(PID(i + 1))
 	return p2.(P)
 }
@@ -1013,6 +1007,7 @@ func (g *Game[P]) Start(h *Header) Playerer {
 
 	cp := pie.First(g.Players)
 	g.SetCurrentPlayers(cp)
-	// g.newEntry(message{"template": "start-game"})
+	g.NewEntry("start-game", nil, Line{"PIDS": g.Players.PIDS()})
+	Debugf("g.Log: %#v", g.Log)
 	return cp
 }

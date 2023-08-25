@@ -35,21 +35,21 @@ func VersionID() string {
 	return os.Getenv(GAE_VERSION)
 }
 
-func (cl Client[G, P]) RequireLogin(ctx *gin.Context) (u User, err error) {
+func (cl Client) requireLogin(ctx *gin.Context) (u User, err error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	if u, err = cl.Current(ctx); err != nil {
+	if u, err = cl.currentUser(ctx); err != nil {
 		return u, fmt.Errorf("must login to access resource: %w", err)
 	}
 	return u, nil
 }
 
-func (cl Client[G, P]) RequireAdmin(ctx *gin.Context) (u User, err error) {
+func (cl Client) RequireAdmin(ctx *gin.Context) (u User, err error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	if u, err = cl.RequireLogin(ctx); err != nil {
+	if u, err = cl.requireLogin(ctx); err != nil {
 		return u, err
 	}
 
