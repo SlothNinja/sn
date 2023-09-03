@@ -26,11 +26,11 @@ func NewMessage(u User, text string) Message {
 	t := time.Now()
 	return Message{
 		Text:             text,
-		CreatorID:        u.ID(),
+		CreatorID:        u.ID,
 		CreatorName:      u.Name,
 		CreatorEmailHash: u.EmailHash,
 		CreatorGravType:  u.GravType,
-		Read:             []UID{u.ID()},
+		Read:             []UID{u.ID},
 		CreatedAt:        t,
 		UpdatedAt:        t,
 	}
@@ -126,7 +126,7 @@ func NewMessage(u User, text string) Message {
 
 func (cl GameClient[G, P]) updateReadHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cu, err := cl.currentUser(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -140,7 +140,7 @@ func (cl GameClient[G, P]) updateReadHandler() gin.HandlerFunc {
 
 		Debugf("read: %#v", read)
 
-		if err := cl.updateRead(ctx, cu.ID(), read); err != nil {
+		if err := cl.updateRead(ctx, cu.ID, read); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -312,7 +312,7 @@ func (cl GameClient[G, P]) validateAddMessage(ctx *gin.Context) (Message, error)
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	cu, err := cl.currentUser(ctx)
+	cu, err := cl.RequireLogin(ctx)
 	if err != nil {
 		return Message{}, err
 	}
@@ -322,7 +322,7 @@ func (cl GameClient[G, P]) validateAddMessage(ctx *gin.Context) (Message, error)
 		return Message{}, err
 	}
 
-	if m.CreatorID != cu.ID() {
+	if m.CreatorID != cu.ID {
 		return Message{}, fmt.Errorf("invalid creator: %w", ErrValidation)
 	}
 	return m, nil

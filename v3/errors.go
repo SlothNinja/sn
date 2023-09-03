@@ -17,16 +17,18 @@ var (
 	ErrActionNotPerformed = fmt.Errorf("player has yet to perform an action: %w", ErrValidation)
 	ErrNotAdmin           = fmt.Errorf("current user is not admin: %w", ErrValidation)
 	ErrNotCurrentPlayer   = fmt.Errorf("current user is not current player: %w", ErrValidation)
-	ErrInvalidCache       = errors.New("invalid cache value")
 )
 
 func JErr(ctx *gin.Context, err error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
 	Debugf(err.Error())
 	if errors.Is(err, ErrValidation) {
 		ctx.JSON(http.StatusOK, gin.H{"Message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusBadRequest, gin.H{"Message": ErrUnexpected.Error()})
+	ctx.JSON(http.StatusOK, gin.H{"Error": err.Error()})
 }
 
 func singleError(err error) error {

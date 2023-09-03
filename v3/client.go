@@ -10,42 +10,45 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/firestore"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
-	"google.golang.org/api/option"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var myRandomSource = rand.NewSource(time.Now().UnixNano())
 
 type Client struct {
-	User   *datastore.Client
 	Log    *Logger
 	Cache  *cache.Cache
 	Router *gin.Engine
 	options
 }
 
-type UserServiceClient struct {
-	Client
-}
-
 type GameClient[G Gamer[G], P Playerer] struct {
-	UserServiceClient
+	Client
 	FS *firestore.Client
 }
 
 type options struct {
-	projectID     string
-	userProjectID string
-	userDSURL     string
-	loggerID      string
-	corsAllow     []string
-	prefix        string
+	projectID        string
+	url              string
+	frontEndURL      string
+	backEndURL       string
+	dsURL            string
+	port             string
+	frontEndPort     string
+	backEndPort      string
+	dsPort           string
+	userProjectID    string
+	userDSURL        string
+	userFrontURL     string
+	secretsProjectID string
+	secretsDSURL     string
+	loggerID         string
+	corsAllow        []string
+	prefix           string
+	home             string
 }
 
 func WithProjectID(id string) Option {
@@ -57,6 +60,148 @@ func WithProjectID(id string) Option {
 
 func getProjectID() string {
 	return os.Getenv("PROJECT_ID")
+}
+
+func (cl Client) GetProjectID() string {
+	return cl.projectID
+}
+
+func WithURL(url string) Option {
+	return func(cl Client) Client {
+		cl.url = url
+		return cl
+	}
+}
+
+func getURL() string {
+	return os.Getenv("URL")
+}
+
+func (cl Client) GetURL() string {
+	return cl.url
+}
+
+func WithFrontEndURL(url string) Option {
+	return func(cl Client) Client {
+		cl.frontEndURL = url
+		return cl
+	}
+}
+
+func getFrontEndURL() string {
+	if url, found := os.LookupEnv("FE_URL"); found {
+		return url
+	}
+	return getURL()
+}
+
+func (cl Client) GetFrontEndURL() string {
+	return cl.frontEndURL
+}
+
+func WithBackEndURL(url string) Option {
+	return func(cl Client) Client {
+		cl.backEndURL = url
+		return cl
+	}
+}
+
+func getBackEndURL() string {
+	if url, found := os.LookupEnv("BE_URL"); found {
+		return url
+	}
+	return getURL()
+}
+
+func (cl Client) GetBackEndURL() string {
+	return cl.backEndURL
+}
+
+func WithDSURL(url string) Option {
+	return func(cl Client) Client {
+		cl.dsURL = url
+		return cl
+	}
+}
+
+func getDSURL() string {
+	if url, found := os.LookupEnv("DS_URL"); found {
+		return url
+	}
+	return getURL()
+}
+
+func (cl Client) GetDSURL() string {
+	return cl.dsURL
+}
+
+func WithPort(port string) Option {
+	return func(cl Client) Client {
+		cl.port = port
+		return cl
+	}
+}
+
+func getPort() string {
+	return os.Getenv("PORT")
+}
+
+func (cl Client) GetPort() string {
+	return cl.port
+}
+
+func WithFrontEndPort(port string) Option {
+	return func(cl Client) Client {
+		cl.frontEndPort = port
+		return cl
+	}
+}
+
+func getFrontEndPort() string {
+	if port, found := os.LookupEnv("FE_PORT"); found {
+		return port
+	}
+	return getPort()
+}
+
+func (cl Client) GetFrontEndPort() string {
+	return cl.frontEndPort
+}
+
+func WithBackEndPort(port string) Option {
+	return func(cl Client) Client {
+		cl.backEndPort = port
+		return cl
+	}
+}
+
+func getBackEndPort() string {
+	if port, found := os.LookupEnv("BE_PORT"); found {
+		return port
+	}
+	return getPort()
+}
+
+func (cl Client) GetBackEndPort() string {
+	return cl.backEndPort
+}
+
+func WithDSPort(port string) Option {
+	return func(cl Client) Client {
+		cl.dsPort = port
+		return cl
+	}
+}
+
+func getDSPort() string {
+	if port, found := os.LookupEnv("DS_PORT"); found {
+		return port
+	}
+	return getPort()
+}
+
+func (cl Client) GetDSPort() string {
+	return cl.dsPort
 }
 
 func WithUserProjectID(id string) Option {
@@ -73,6 +218,28 @@ func getUserProjectID() string {
 	return "user-slothninja-games"
 }
 
+func (cl Client) GetUserProjectID() string {
+	return cl.userProjectID
+}
+
+func WithSecretsProjectID(id string) Option {
+	return func(cl Client) Client {
+		cl.secretsProjectID = id
+		return cl
+	}
+}
+
+func getSecretsProjectID() string {
+	if id, found := os.LookupEnv("SECRETS_PROJECT_ID"); found {
+		return id
+	}
+	return "user-slothninja-games"
+}
+
+func (cl Client) GetSecretsProjectID() string {
+	return cl.secretsProjectID
+}
+
 func WithUserDSURL(url string) Option {
 	return func(cl Client) Client {
 		cl.userDSURL = url
@@ -85,9 +252,55 @@ func getUserDSURL() string {
 		return url
 	}
 	if IsProduction() {
-		return "https://user.slothninja.com/"
+		return "user.slothninja.com"
 	}
-	return "https://user.fake-slothninja.com:8086/"
+	return "user.fake-slothninja.com:8086"
+}
+
+func (cl Client) GetUserDSURL() string {
+	return cl.userDSURL
+}
+
+func WithUserFrontURL(url string) Option {
+	return func(cl Client) Client {
+		cl.userFrontURL = url
+		return cl
+	}
+}
+
+func getUserFrontURL() string {
+	if url, found := os.LookupEnv("USER_FRONT_URL"); found {
+		return url
+	}
+	if IsProduction() {
+		return "user.slothninja.com"
+	}
+	return "user.fake-slothninja.com:8088"
+}
+
+func (cl Client) GetUserFrontURL() string {
+	return cl.userFrontURL
+}
+
+func WithSecretsDSURL(url string) Option {
+	return func(cl Client) Client {
+		cl.secretsDSURL = url
+		return cl
+	}
+}
+
+func getSecretsDSURL() string {
+	if url, found := os.LookupEnv("SECRETS_DS_URL"); found {
+		return url
+	}
+	if IsProduction() {
+		return "user.slothninja.com"
+	}
+	return "user.fake-slothninja.com:8086"
+}
+
+func (cl Client) GetSecretsDSURL() string {
+	return cl.secretsDSURL
 }
 
 func WithLoggerID(id string) Option {
@@ -102,6 +315,10 @@ func getLoggerID() string {
 		return id
 	}
 	return getProjectID()
+}
+
+func (cl Client) GetLoggerID() string {
+	return cl.loggerID
 }
 
 func WithCORSAllow(paths ...string) Option {
@@ -119,6 +336,10 @@ func getCORSAllow() []string {
 	return strings.Split(cors, ",")
 }
 
+func (cl Client) GetCORSAllow() []string {
+	return cl.corsAllow
+}
+
 func WithPrefix(prefix string) Option {
 	return func(cl Client) Client {
 		cl.prefix = prefix
@@ -130,24 +351,53 @@ func getPrefix() string {
 	if prefix, found := os.LookupEnv("PREFIX"); found {
 		return prefix
 	}
-	return "sn"
+	return "/sn"
+}
+
+func (cl Client) GetPrefix() string {
+	return cl.prefix
+}
+
+func WithHome(path string) Option {
+	return func(cl Client) Client {
+		cl.home = path
+		return cl
+	}
+}
+
+func getHome() string {
+	if prefix, found := os.LookupEnv("HOME"); found {
+		return prefix
+	}
+	return "/"
+}
+
+func (cl Client) GetHome() string {
+	return cl.home
 }
 
 type Option func(Client) Client
 
-func NewUserServiceClient(ctx context.Context, opt ...Option) UserServiceClient {
-	cl := UserServiceClient{NewClient(ctx, opt...)}
-	return cl.addRoutes(cl.prefix)
-}
-
 func defaultClient() Client {
 	var cl Client
 	cl.projectID = getProjectID()
+	cl.url = getURL()
+	cl.frontEndURL = getFrontEndURL()
+	cl.backEndURL = getBackEndURL()
+	cl.dsURL = getDSURL()
+	cl.port = getPort()
+	cl.backEndPort = getBackEndPort()
+	cl.frontEndPort = getFrontEndPort()
+	cl.dsPort = getDSPort()
 	cl.userProjectID = getUserProjectID()
 	cl.userDSURL = getUserDSURL()
+	cl.userFrontURL = getUserFrontURL()
+	cl.secretsProjectID = getSecretsProjectID()
+	cl.secretsDSURL = getSecretsDSURL()
 	cl.loggerID = getLoggerID()
 	cl.corsAllow = getCORSAllow()
 	cl.prefix = getPrefix()
+	cl.home = getHome()
 	return cl
 }
 
@@ -159,74 +409,42 @@ func NewClient(ctx context.Context, opts ...Option) Client {
 		cl = opt(cl)
 	}
 
-	// Initalize Logger
+	// Initalize
+	return cl.initLogger().
+		initCache().
+		initRouter().
+		initSession(ctx).
+		initMode().
+		addRoutes()
+}
+
+func (cl Client) initLogger() Client {
 	lClient, err := NewLogClient(cl.projectID)
 	if err != nil {
 		log.Panicf("unable to create logging client: %v", err)
 	}
 	cl.Log = lClient.Logger(cl.loggerID)
+	return cl
+}
 
-	// Initialize user datastore
-	cl = cl.initUserDatastore(ctx)
-
-	// Initialize cached
+func (cl Client) initCache() Client {
 	cl.Cache = cache.New(30*time.Minute, 10*time.Minute)
+	return cl
+}
 
-	// Initialize router
+func (cl Client) initRouter() Client {
 	cl.Router = gin.Default()
+	return cl
+}
 
-	// Initialize cookie store
-	cl.NewStore(ctx)
-
+func (cl Client) initMode() Client {
 	if IsProduction() {
-		return cl.production(ctx).addRoutes(cl.prefix)
+		gin.SetMode(gin.ReleaseMode)
+		cl.Router.TrustedPlatform = gin.PlatformGoogleAppEngine
+		return cl
 	}
-	return cl.development(ctx).addRoutes(cl.prefix)
-}
 
-func (cl Client) production(ctx context.Context, opts ...Option) Client {
-	Debugf("production")
-	gin.SetMode(gin.ReleaseMode)
-	cl.Router.TrustedPlatform = gin.PlatformGoogleAppEngine
-	return cl
-}
-
-func (cl Client) initUserDatastore(ctx context.Context) Client {
-	if IsProduction() {
-		return cl.productionUserDatastore(ctx)
-	}
-	return cl.developmentUserDataStore(ctx)
-}
-
-func (cl Client) productionUserDatastore(ctx context.Context) Client {
-	dsClient, err := datastore.NewClient(ctx, cl.userProjectID)
-	if err != nil {
-		panic(fmt.Errorf("unable to connect to user database: %w", err))
-	}
-	cl.User = dsClient
-	return cl
-}
-
-func (cl Client) developmentUserDataStore(ctx context.Context) Client {
-	dsClient, err := datastore.NewClient(
-		ctx,
-		cl.userProjectID,
-		option.WithEndpoint(cl.userDSURL),
-		option.WithoutAuthentication(),
-		option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
-		option.WithGRPCConnectionPool(50),
-	)
-	if err != nil {
-		panic(fmt.Errorf("unable to connect to user database: %w", err))
-	}
-	cl.User = dsClient
-	return cl
-}
-
-func (cl Client) development(ctx context.Context) Client {
-	Debugf("development")
 	gin.SetMode(gin.DebugMode)
-
 	config := cors.DefaultConfig()
 	config.AllowOrigins = cl.corsAllow
 	config.AllowCredentials = true
@@ -237,7 +455,7 @@ func (cl Client) development(ctx context.Context) Client {
 }
 
 func NewGameClient[G Gamer[G], P Playerer](ctx context.Context, opts ...Option) GameClient[G, P] {
-	cl := GameClient[G, P]{UserServiceClient: NewUserServiceClient(ctx, opts...)}
+	cl := GameClient[G, P]{Client: NewClient(ctx, opts...)}
 
 	var err error
 	if cl.FS, err = firestore.NewClient(ctx, cl.projectID); err != nil {
@@ -247,41 +465,13 @@ func NewGameClient[G Gamer[G], P Playerer](ctx context.Context, opts ...Option) 
 }
 
 // AddRoutes addes routing for game.
-func (cl Client) addRoutes(prefix string) Client {
+func (cl Client) addRoutes() Client {
 	/////////////////////////////////////////////
 	// Current User
-	cl.Router.GET(prefix+"/user/current", cl.cuHandler())
+	cl.Router.GET(cl.prefix+"/user/current", cl.cuHandler())
 
 	// warmup
 	cl.Router.GET("_ah/warmup", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
-
-	return cl
-}
-
-// AddRoutes addes routing for game.
-func (cl UserServiceClient) addRoutes(prefix string) UserServiceClient {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	// New
-	cl.Router.GET(prefix+"/user/new", cl.NewUserHandler)
-
-	// Create
-	cl.Router.PUT(prefix+"/user/new", cl.CreateUserHandler)
-
-	// Update
-	cl.Router.PUT(prefix+"/user/:uid/update", cl.UpdateUser("uid"))
-
-	// Get
-	cl.Router.GET(prefix+"/user/:uid/json", cl.userJSONHandler("uid"))
-
-	cl.Router.GET(prefix+"/user/:uid/as", cl.As)
-
-	cl.Router.GET(prefix+"/user/login", Login(prefix+"/user/auth"))
-
-	cl.Router.GET(prefix+"/user/logout", Logout)
-
-	cl.Router.GET(prefix+"/user/auth", cl.Auth(prefix+"/user/auth"))
 
 	return cl
 }
@@ -350,10 +540,6 @@ func (cl GameClient[G, P]) Close() error {
 	return cl.Client.Close()
 }
 
-func (cl UserServiceClient) Close() error {
-	return cl.Client.Close()
-}
-
 func (cl Client) Close() error {
-	return cl.User.Close()
+	return nil
 }

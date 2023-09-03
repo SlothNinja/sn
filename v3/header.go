@@ -296,11 +296,11 @@ var defaultColorMaps = ColorMaps{
 // }
 
 func (h *Header) CanAdd(u User) bool {
-	return len(h.UserIDS) < h.NumPlayers && !pie.Contains(h.UserIDS, u.ID())
+	return len(h.UserIDS) < h.NumPlayers && !pie.Contains(h.UserIDS, u.ID)
 }
 
 func (h *Header) CanDropout(u User) bool {
-	return h.Status == Recruiting && pie.Contains(h.UserIDS, u.ID())
+	return h.Status == Recruiting && pie.Contains(h.UserIDS, u.ID)
 }
 
 func (h *Header) Stub() string {
@@ -312,11 +312,11 @@ func (h *Header) Stub() string {
 // }
 
 func (h *Header) HasUser(u User) bool {
-	return pie.Contains(h.UserIDS, u.ID())
+	return pie.Contains(h.UserIDS, u.ID)
 }
 
 func (h *Header) RemoveUser(u2 User) {
-	i := h.IndexFor(u2.ID())
+	i := h.IndexFor(u2.ID)
 	if i == UIndexNotFound {
 		return
 	}
@@ -344,7 +344,7 @@ func (h *Header) RemoveUser(u2 User) {
 	}
 }
 func (h *Header) AddUser(u User) {
-	h.UserIDS = append(h.UserIDS, u.ID())
+	h.UserIDS = append(h.UserIDS, u.ID)
 	// h.UserKeys = append(h.UserKeys, u.Key)
 	h.UserNames = append(h.UserNames, u.Name)
 	h.UserEmails = append(h.UserEmails, u.Email)
@@ -355,7 +355,7 @@ func (h *Header) AddUser(u User) {
 
 func (h *Header) AddCreator(u User) {
 	// h.Creator = u
-	h.CreatorID = u.ID()
+	h.CreatorID = u.ID
 	// h.CreatorKey = u.Key
 	h.CreatorName = u.Name
 	h.CreatorEmail = u.Email

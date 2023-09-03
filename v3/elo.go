@@ -80,7 +80,7 @@ func eloCopy(elo Elo) *Elo {
 // 	return pie.First(elos), nil
 // }
 
-type Results map[int][]*datastore.Key
+type Results map[int][]UID
 
 // range through may has not guaranteed order
 // places provides ordered list of map keys so map may be tranversed in order

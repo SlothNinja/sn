@@ -143,7 +143,7 @@ func (cl GameClient[G, P]) createInvitationHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.getCU(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -240,7 +240,7 @@ func (cl GameClient[G, P]) acceptHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -336,7 +336,7 @@ func (cl GameClient[G, P]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -385,7 +385,7 @@ func (cl GameClient[G, P]) Save(ctx context.Context, g G, u User) error {
 	})
 }
 
-func (cl GameClient[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, cu User) error {
+func (cl GameClient[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -406,7 +406,7 @@ func (cl GameClient[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transac
 			return err
 		}
 	}
-	return cl.clearCached(ctx, g, cu)
+	return cl.clearCached(ctx, g, u)
 }
 
 func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error {
@@ -425,7 +425,7 @@ func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error 
 
 		// if current user is admin, clear all cached docs
 		// otherwise clear only if cached doc is for current user
-		if cu.Admin || docRefFor(ref, cu.ID()) {
+		if cu.Admin || docRefFor(ref, cu.ID) {
 			_, err = ref.Delete(ctx)
 			if err != nil {
 				return err
@@ -433,7 +433,7 @@ func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error 
 		}
 	}
 
-	_, err := cl.StackDocRef(g.getHeader().ID, cu.ID()).Delete(ctx)
+	_, err := cl.StackDocRef(g.getHeader().ID, cu.ID).Delete(ctx)
 
 	return err
 }
@@ -466,7 +466,7 @@ func (cl GameClient[G, P]) detailsHandler() gin.HandlerFunc {
 			return
 		}
 
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -475,8 +475,8 @@ func (cl GameClient[G, P]) detailsHandler() gin.HandlerFunc {
 		uids := make([]UID, len(inv.getHeader().UserIDS))
 		copy(uids, inv.getHeader().UserIDS)
 
-		if hasUID := pie.Any(inv.getHeader().UserIDS, func(id UID) bool { return id == cu.ID() }); !hasUID {
-			uids = append(uids, cu.ID())
+		if hasUID := pie.Any(inv.getHeader().UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
+			uids = append(uids, cu.ID)
 		}
 
 		// elos, err := cl.Elo.GetMulti(c, uids)

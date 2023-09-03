@@ -3,14 +3,12 @@ package sn
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 	"reflect"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/firestore"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
@@ -123,8 +121,8 @@ func (cl GameClient[G, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef
 //
 // Returns (true, nil) if game should be started
 // func (h *Header) Accept(c *gin.Context, u User) (start bool, err error) {
-// 	Debugf(msgEnter)
-// 	defer Debugf(msgExit)
+// 	Debug(msgEnter)
+// 	defer Debug(msgExit)
 //
 // 	err = h.validateAccept(c, u)
 // 	if err != nil {
@@ -132,7 +130,7 @@ func (cl GameClient[G, P]) viewDocRef(id string, uid UID) *firestore.DocumentRef
 // 	}
 //
 // 	h.AddUser(u)
-// 	Debugf("h: %#v", h)
+// 	Debug("h: %#v", h)
 // 	if len(h.UserIDS) == h.NumPlayers {
 // 		return true, nil
 // 	}
@@ -176,7 +174,7 @@ func (h *Header) validateAcceptWith(u User, pwd, hash []byte) error {
 	case len(hash) != 0:
 		err := bcrypt.CompareHashAndPassword(hash, pwd)
 		if err != nil {
-			Warningf(err.Error())
+			Debugf(err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
 				u.Name, h.Title, ErrValidation)
 		}
@@ -217,7 +215,7 @@ func (cl GameClient[G, P]) resetHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -251,12 +249,12 @@ func (cl GameClient[G, P]) undoHandler() gin.HandlerFunc {
 		defer cl.Log.Debugf(msgExit)
 
 		id := getID(ctx)
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
 
-		ref := cl.StackDocRef(id, cu.ID())
+		ref := cl.StackDocRef(id, cu.ID)
 		snap, err := ref.Get(ctx)
 		if err != nil {
 			JErr(ctx, err)
@@ -292,12 +290,12 @@ func (cl GameClient[G, P]) redoHandler() gin.HandlerFunc {
 		defer cl.Log.Debugf(msgExit)
 
 		id := getID(ctx)
-		cu, err := cl.requireLogin(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
 
-		ref := cl.StackDocRef(id, cu.ID())
+		ref := cl.StackDocRef(id, cu.ID)
 		snap, err := ref.Get(ctx)
 		if err != nil {
 			JErr(ctx, err)
@@ -359,12 +357,7 @@ func (cl GameClient[G, P]) rollbackHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.requireLogin(ctx)
-		if err != nil {
-			cl.Log.Warningf(err.Error())
-		}
-
-		err = ValidateAdmin(cu)
+		cuid, err := cl.RequireAdmin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -386,7 +379,7 @@ func (cl GameClient[G, P]) rollbackHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.Save(ctx, g, cu)
+		err = cl.Save(ctx, g, cuid)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -401,12 +394,7 @@ func (cl GameClient[G, P]) rollforwardHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.requireLogin(ctx)
-		if err != nil {
-			cl.Log.Warningf(err.Error())
-		}
-
-		err = ValidateAdmin(cu)
+		cuid, err := cl.RequireAdmin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -432,7 +420,7 @@ func (cl GameClient[G, P]) rollforwardHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.Save(ctx, g, cu)
+		err = cl.Save(ctx, g, cuid)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -440,13 +428,6 @@ func (cl GameClient[G, P]) rollforwardHandler() gin.HandlerFunc {
 
 		ctx.JSON(http.StatusOK, nil)
 	}
-}
-
-func ValidateAdmin(cu User) error {
-	if cu.IsAdmin() {
-		return nil
-	}
-	return errors.New("not admin")
 }
 
 func (cl GameClient[G, P]) getRev(ctx *gin.Context, rev int) (G, error) {
@@ -481,7 +462,7 @@ func (cl GameClient[G, P]) getGame(ctx *gin.Context, cu User, action ...stackFun
 		return g, nil
 	}
 
-	undo, err := cl.getStack(ctx, cu.ID())
+	undo, err := cl.getStack(ctx, cu.ID)
 	// if undo stack not found, then simply return g which is committed game
 	if status.Code(err) == codes.NotFound {
 		return g, nil
@@ -498,7 +479,7 @@ func (cl GameClient[G, P]) getGame(ctx *gin.Context, cu User, action ...stackFun
 		return g, nil
 	}
 
-	g, err = cl.getCached(ctx, undo.Current, cu.ID())
+	g, err = cl.getCached(ctx, undo.Current, cu.ID)
 	if err != nil {
 		return g, err
 	}
@@ -558,15 +539,15 @@ func (cl GameClient[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID()), g); err != nil {
+		if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), g); err != nil {
 			return err
 		}
 
-		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID()), viewFor(g, u.ID())); err != nil {
+		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), viewFor(g, u.ID)); err != nil {
 			return err
 		}
 
-		return tx.Set(cl.StackDocRef(g.getHeader().ID, u.ID()), g.getHeader().Undo)
+		return tx.Set(cl.StackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
 	})
 }
 
@@ -580,7 +561,7 @@ func (cl GameClient[G, P]) CachedHandler(action func(G, *gin.Context, User) erro
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.currentUser(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -611,7 +592,7 @@ func (cl GameClient[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) 
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cu, err := cl.currentUser(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
@@ -713,7 +694,7 @@ func (g Game[P]) CurrentPlayer() P {
 // Returns player asssociated with user if such player is current player
 // Otherwise, return nil
 func (g Game[P]) CurrentPlayerFor(u User) P {
-	i := g.IndexFor(u.ID())
+	i := g.IndexFor(u.ID)
 	if i == -1 {
 		var zerop P
 		return zerop
@@ -768,9 +749,9 @@ func (g Game[P]) UIDSForPIDS(pids []PID) []UID {
 	return pie.Map(pids, func(pid PID) UID { return g.UIDForPID(pid) })
 }
 
-func (g Game[P]) UserKeyFor(pid PID) *datastore.Key {
-	return NewUser(g.UIDForPID(pid)).Key
-}
+// func (g Game[P]) UserKeyFor(pid PID) *datastore.Key {
+// 	return NewUser(g.UIDForPID(pid)).Key
+// }
 
 // cp specifies the current
 // return player after cp that satisfies all tests ts
@@ -1008,6 +989,6 @@ func (g *Game[P]) Start(h *Header) Playerer {
 	cp := pie.First(g.Players)
 	g.SetCurrentPlayers(cp)
 	g.NewEntry("start-game", nil, Line{"PIDS": g.Players.PIDS()})
-	Debugf("g.Log: %#v", g.Log)
+	Warningf("g.Log: %#v", g.Log)
 	return cp
 }

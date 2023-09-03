@@ -1,0 +1,14 @@
+package sn
+
+import (
+	"log"
+	"log/slog"
+	"os"
+)
+
+var DefaultLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: slog.LevelDebug}))
+var Debug = DefaultLogger.Debug
+var Info = DefaultLogger.Info
+var Warn = DefaultLogger.Warn
+var Error = DefaultLogger.Error
+var Panic = log.Panicf

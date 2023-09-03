@@ -35,40 +35,39 @@ func VersionID() string {
 	return os.Getenv(GAE_VERSION)
 }
 
-func (cl Client) requireLogin(ctx *gin.Context) (u User, err error) {
+func (cl Client) RequireLogin(ctx *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	if u, err = cl.currentUser(ctx); err != nil {
-		return u, fmt.Errorf("must login to access resource: %w", err)
+	cu, err := cl.getCU(ctx)
+	cl.Log.Debugf("cu: %#v", cu)
+	if err != nil {
+		return User{}, fmt.Errorf("must login to access resource: %w", err)
 	}
-	return u, nil
+	return cu, nil
 }
 
-func (cl Client) RequireAdmin(ctx *gin.Context) (u User, err error) {
+func (cl Client) RequireAdmin(ctx *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	if u, err = cl.requireLogin(ctx); err != nil {
-		return u, err
+	admin, err := cl.GetAdmin(ctx)
+	if !admin {
+		return User{}, fmt.Errorf("must be admin access resource: %w", err)
 	}
 
-	if err = ValidateAdmin(u); err != nil {
-		return u, fmt.Errorf("must be admin access resource: %w", err)
-	}
-
-	return u, nil
+	return cl.RequireLogin(ctx)
 }
 
 // func (client *Client) Index(prefix string) gin.HandlerFunc {
 // 	return func(c *gin.Context) {
-// 		cl.Debugf(msgEnter)
-// 		defer cl.Debugf(msgExit)
+// 		cl.Debug(msgEnter)
+// 		defer cl.Debug(msgExit)
 //
 // 		gs := GamersFrom(c)
 // 		cu, err := client.User.Current(c)
 // 		if err != nil {
-// 			cl.Debugf(err.Error())
+// 			cl.Debug(err.Error())
 // 		}
 //
 // 		status := StatusFrom(c)
@@ -93,8 +92,8 @@ func (cl Client) RequireAdmin(ctx *gin.Context) (u User, err error) {
 // }
 
 // func (client *Client) JIndex(c *gin.Context) {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	options := struct {
 // 		ItemsPerPage int    `json:"itemsPerPage"`
@@ -107,7 +106,7 @@ func (cl Client) RequireAdmin(ctx *gin.Context) (u User, err error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("options: %#v", options)
+// 	cl.Debug("options: %#v", options)
 //
 // 	cu, err := client.User.Current(c)
 // 	if err != nil {
@@ -133,7 +132,7 @@ func (cl Client) RequireAdmin(ctx *gin.Context) (u User, err error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("cnt: %v", cnt)
+// 	cl.Debug("cnt: %v", cnt)
 // 	items := options.ItemsPerPage
 // 	if options.ItemsPerPage == -1 {
 // 		items = cnt
@@ -271,8 +270,8 @@ const (
 // }
 
 // func (client Client) JSONIndexAction(c *gin.Context) {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	cu, err := client.User.Current(c)
 // 	if err != nil {
@@ -289,8 +288,8 @@ const (
 // }
 
 // func toGameTable(c *gin.Context, cu *user.User, cnt int64) (*jGamesIndex, error) {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	gs := GamersFrom(c)
 // 	table := new(jGamesIndex)
@@ -327,8 +326,8 @@ const (
 // }
 //
 // func ToGameTable(c *gin.Context, gs []Gamer, cnt int64, cu *user.User) (*jGamesIndex, error) {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	table := new(jGamesIndex)
 // 	l := len(gs)
@@ -380,8 +379,8 @@ const (
 // }
 
 // func actionButtons(c *gin.Context, cu *user.User, g Gamer) template.HTML {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	h := g.GetHeader()
 // 	switch h.Status {
@@ -449,8 +448,8 @@ type GOptions struct {
 }
 
 // func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, int, datastore.Cursor, error) {
-// 	cl.Log.Debugf(msgEnter)
-// 	defer cl.Log.Debugf(msgExit)
+// 	cl.Log.Debug(msgEnter)
+// 	defer cl.Log.Debug(msgExit)
 //
 // 	q := datastore.
 // 		NewQuery(opt.Kind).
@@ -466,7 +465,7 @@ type GOptions struct {
 // 	}
 //
 // 	cnt, err := cl.DS.Count(ctx, q)
-// 	cl.Log.Debugf("cnt: %v err: %v", cnt, err)
+// 	cl.Log.Debug("cnt: %v err: %v", cnt, err)
 // 	if err != nil {
 // 		return nil, -1, datastore.Cursor{}, err
 // 	}
@@ -594,8 +593,8 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 }
 
 // func (cl *Client) GamesIndex(c *gin.Context) {
-// 	cl.Debugf(msgEnter)
-// 	defer cl.Debugf(msgExit)
+// 	cl.Debug(msgEnter)
+// 	defer cl.Debug(msgExit)
 //
 // 	obj := struct {
 // 		Options struct {
@@ -613,15 +612,15 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("obj: %#v", obj)
+// 	cl.Debug("obj: %#v", obj)
 //
 // 	cu, err := cl.User.Current(c)
 // 	if err != nil {
 // 		sn.JErr(c, err)
 // 		return
 // 	}
-// 	cl.Debugf("cu: %#v", cu)
-// 	cl.Debugf("err: %#v", err)
+// 	cl.Debug("cu: %#v", cu)
+// 	cl.Debug("err: %#v", err)
 //
 // 	forward, err := datastore.DecodeCursor(obj.Forward)
 // 	if err != nil {
@@ -629,7 +628,7 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("forward: %#v", forward)
+// 	cl.Debug("forward: %#v", forward)
 // 	status := ToStatus[obj.Status]
 // 	t := gType.ToType[obj.Type]
 // 	q := datastore.
@@ -651,7 +650,7 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("cnt: %v", cnt)
+// 	cl.Debug("cnt: %v", cnt)
 // 	items := obj.Options.ItemsPerPage
 // 	if obj.Options.ItemsPerPage == -1 {
 // 		items = cnt
@@ -678,8 +677,8 @@ func (e IndexEntry) MarshalJSON() ([]byte, error) {
 // 		return
 // 	}
 //
-// 	cl.Debugf("forward: %#v", forward)
-// 	cl.Debugf("forward.String: %#v", forward.String())
+// 	cl.Debug("forward: %#v", forward)
+// 	cl.Debug("forward.String: %#v", forward.String())
 // 	c.JSON(http.StatusOK, gin.H{
 // 		"gheaders":   es,
 // 		"totalItems": cnt,

@@ -3,7 +3,6 @@ package sn
 import (
 	"sort"
 
-	"cloud.google.com/go/datastore"
 	"github.com/elliotchance/pie/v2"
 )
 
@@ -83,6 +82,10 @@ func (h Header) NameFor(pid PID) string {
 	return h.UserNames[pid.ToIndex()]
 }
 
+func (h Header) UIDFor(pid PID) UID {
+	return h.UserIDS[pid.ToIndex()]
+}
+
 func (h Header) NameByUID(uid UID) string {
 	return h.NameByIndex(h.IndexFor(uid))
 }
@@ -138,7 +141,7 @@ func (g Game[P]) determinePlaces() (Results, error) {
 		// Find all players tied at place
 		found := pie.Filter(ps, func(p P) bool { return ps[0].compareByScore(p) == EqualTo })
 		// Get user keys for found players
-		rs[place] = pie.Map(found, func(p P) *datastore.Key { return g.UserKeyFor(p.getPID()) })
+		rs[place] = pie.Map(found, func(p P) UID { return g.UIDFor(p.getPID()) })
 		// Set ps to remaining players
 		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.getPID() == p2.getPID() })
 		// Above does not guaranty order so sort
