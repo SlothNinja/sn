@@ -1,12 +1,14 @@
 package sn
 
 import (
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
 
 	firebase "firebase.google.com/go"
 	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,9 +19,10 @@ func init() {
 var ErrMissingToken = fmt.Errorf("missing token")
 
 const (
-	sessionKey = "session"
-	emailKey   = "email"
-	nameKey    = "name"
+	emailKey    = "email"
+	nameKey     = "name"
+	sessionName = "sng-oauth"
+	sessionKey  = "session"
 )
 
 type session struct {
@@ -47,7 +50,7 @@ func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 	return token, err
 }
 
-func (cl Client) getCUID(ctx *gin.Context) (UID, error) {
+func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -59,7 +62,7 @@ func (cl Client) getCUID(ctx *gin.Context) (UID, error) {
 	return token.ID, nil
 }
 
-func (cl Client) getCU(ctx *gin.Context) (User, error) {
+func (cl *Client) getCU(ctx *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -72,7 +75,7 @@ func (cl Client) getCU(ctx *gin.Context) (User, error) {
 	return User{ID: token.ID, Data: token.Data}, nil
 }
 
-func (cl Client) GetAdmin(ctx *gin.Context) (bool, error) {
+func (cl *Client) GetAdmin(ctx *gin.Context) (bool, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -154,6 +157,34 @@ func (s session) getNewUserName() (string, error) {
 	return name, nil
 }
 
-func (cl Client) Session(ctx *gin.Context) session {
+func (cl *Client) Session(ctx *gin.Context) session {
 	return session{sessions.Default(ctx)}
+}
+
+// NewStore generates a new secure cookie store
+func (cl *Client) initSession(ctx context.Context) *Client {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	s, err := cl.getSessionSecrets(ctx)
+	if err != nil {
+		panic(fmt.Errorf("unable to create cookie store: %v", err))
+	}
+
+	store := cookie.NewStore(s.HashKey, s.BlockKey)
+	opts := sessions.Options{
+		Domain: "fake-slothninja.com",
+		Path:   "/",
+	}
+	if IsProduction() {
+		opts = sessions.Options{
+			Domain: "slothninja.com",
+			Path:   "/",
+			MaxAge: 60 * 60 * 24, // 1 Day in seconds
+			Secure: true,
+		}
+	}
+	store.Options(opts)
+	cl.Router.Use(sessions.Sessions(sessionName, store))
+	return cl
 }

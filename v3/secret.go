@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gorilla/securecookie"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -15,27 +13,18 @@ import (
 )
 
 const (
-	hashKeyLength    = 64
-	blockKeyLength   = 32
-	secretsProjectID = "SECRETS_PROJECT_ID"
-	secretsDSHost    = "SECRETS_DS_HOST"
-	sessionName      = "sng-oauth"
+	hashKeyLength  = 64
+	blockKeyLength = 32
 )
 
-// Secret stores secrets for secure cookie
-type Secret struct {
-	HashKey   []byte         `json:"hashKey"`
-	BlockKey  []byte         `json:"blockKey"`
-	UpdatedAt time.Time      `json:"updatedAt"`
-	Key       *datastore.Key `datastore:"__key__" json:"-"`
+// sessionSecret stores secrets for secure cookie
+type sessionSecret struct {
+	HashKey   []byte    `json:"hashKey"`
+	BlockKey  []byte    `json:"blockKey"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-type secretsClient struct {
-	Client
-	DS *datastore.Client
-}
-
-func (cl Client) getSessionSecrets(ctx context.Context) (*Secret, error) {
+func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -54,18 +43,18 @@ func (cl Client) getSessionSecrets(ctx context.Context) (*Secret, error) {
 }
 
 // mcGet attempts to pull secret from cache
-func (cl Client) mcGetSessionSecrets() (*Secret, bool) {
+func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	k := SecretsKey().Encode()
+	k := secretsKey().Encode()
 
 	item, found := cl.Cache.Get(k)
 	if !found {
 		return nil, false
 	}
 
-	s, ok := item.(*Secret)
+	s, ok := item.(*sessionSecret)
 	if !ok {
 		cl.Cache.Delete(k)
 		return nil, false
@@ -74,7 +63,7 @@ func (cl Client) mcGetSessionSecrets() (*Secret, bool) {
 }
 
 // dsGet attempt to pull secret from datastore
-func (cl Client) dsGetSessionSecrets(ctx context.Context) (*Secret, error) {
+func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -83,12 +72,12 @@ func (cl Client) dsGetSessionSecrets(ctx context.Context) (*Secret, error) {
 		return nil, fmt.Errorf("unable to get secrets datastore: %v", err)
 	}
 
-	s := &Secret{Key: SecretsKey()}
-	err = secretsDS.Get(ctx, s.Key, s)
+	s := new(sessionSecret)
+	err = secretsDS.Get(ctx, secretsKey(), s)
 	return s, err
 }
 
-func (cl Client) updateSessionSecrets(c context.Context) (*Secret, error) {
+func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -102,11 +91,11 @@ func (cl Client) updateSessionSecrets(c context.Context) (*Secret, error) {
 		return nil, err
 	}
 
-	_, err = secretsDS.Put(c, s.Key, s)
+	_, err = secretsDS.Put(c, secretsKey(), s)
 	return s, err
 }
 
-func (cl Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
+func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -116,14 +105,14 @@ func (cl Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Cli
 	return cl.getDevelopmentSessionSecretsDataStore(ctx)
 }
 
-func (cl Client) getProductionSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
+func (cl *Client) getProductionSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return datastore.NewClient(ctx, cl.secretsProjectID)
 }
 
-func (cl Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*datastore.Client, error) {
+func (cl *Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*datastore.Client, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -137,15 +126,15 @@ func (cl Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*da
 	)
 }
 
-func SecretsKey() *datastore.Key {
+func secretsKey() *datastore.Key {
 	return datastore.NameKey("Secrets", "cookie", nil)
 }
 
-func genSessionSecrets() (*Secret, error) {
-	s := &Secret{
-		HashKey:  securecookie.GenerateRandomKey(hashKeyLength),
-		BlockKey: securecookie.GenerateRandomKey(blockKeyLength),
-		Key:      SecretsKey(),
+func genSessionSecrets() (*sessionSecret, error) {
+	s := &sessionSecret{
+		HashKey:   securecookie.GenerateRandomKey(hashKeyLength),
+		BlockKey:  securecookie.GenerateRandomKey(blockKeyLength),
+		UpdatedAt: time.Now(),
 	}
 
 	if s.HashKey == nil {
@@ -157,49 +146,4 @@ func genSessionSecrets() (*Secret, error) {
 	}
 
 	return s, nil
-}
-
-func (s *Secret) Load(ps []datastore.Property) error {
-	return datastore.LoadStruct(s, ps)
-}
-
-func (s *Secret) Save() ([]datastore.Property, error) {
-	s.UpdatedAt = time.Now()
-	return datastore.SaveStruct(s)
-}
-
-func (s *Secret) LoadKey(k *datastore.Key) error {
-	s.Key = k
-	return nil
-}
-
-// Store represents a secure cookie store
-type Store cookie.Store
-
-// NewStore generates a new secure cookie store
-func (cl Client) initSession(ctx context.Context) Client {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	s, err := cl.getSessionSecrets(ctx)
-	if err != nil {
-		panic(fmt.Errorf("unable to create cookie store: %v", err))
-	}
-
-	store := cookie.NewStore(s.HashKey, s.BlockKey)
-	opts := sessions.Options{
-		Domain: "fake-slothninja.com",
-		Path:   "/",
-	}
-	if IsProduction() {
-		opts = sessions.Options{
-			Domain: "slothninja.com",
-			Path:   "/",
-			MaxAge: 60 * 60 * 24, // 1 Day in seconds
-			Secure: true,
-		}
-	}
-	store.Options(opts)
-	cl.Router.Use(sessions.Sessions(sessionName, store))
-	return cl
 }

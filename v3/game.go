@@ -34,10 +34,10 @@ type Game[P Playerer] struct {
 	Log     glog
 }
 
-type Gamer[G any] interface {
+type Gamer[G any, P Playerer] interface {
 	Views() ([]UID, []G)
-	SetCurrentPlayers(...Playerer)
-	Start(*Header) Playerer
+	SetCurrentPlayers(...P)
+	Start(*Header) P
 
 	setFinishOrder() PlacesMap
 	getHeader() *Header
@@ -343,7 +343,7 @@ func (cl GameClient[G, P]) abandonHandler() gin.HandlerFunc {
 		}
 
 		g.getHeader().Status = Abandoned
-		if err := cl.Save(ctx, g, cu); err != nil {
+		if err := cl.save(ctx, g, cu); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -379,7 +379,7 @@ func (cl GameClient[G, P]) rollbackHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.Save(ctx, g, cuid)
+		err = cl.save(ctx, g, cuid)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -420,7 +420,7 @@ func (cl GameClient[G, P]) rollforwardHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.Save(ctx, g, cuid)
+		err = cl.save(ctx, g, cuid)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -529,7 +529,7 @@ func (cl GameClient[G, P]) getCommitted(ctx *gin.Context) (G, error) {
 	return g, nil
 }
 
-func newGame[G Gamer[G]]() G {
+func newGame[G any]() G {
 	var g G
 	return reflect.New(reflect.TypeOf(g).Elem()).Interface().(G)
 }
@@ -543,7 +543,7 @@ func (cl GameClient[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 			return err
 		}
 
-		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), viewFor(g, u.ID)); err != nil {
+		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), viewFor[G, P](g, u.ID)); err != nil {
 			return err
 		}
 
@@ -551,7 +551,7 @@ func (cl GameClient[G, P]) putCached(ctx *gin.Context, g G, u User) error {
 	})
 }
 
-func viewFor[G Gamer[G]](g G, uid1 UID) G {
+func viewFor[G Gamer[G, P], P Playerer](g G, uid1 UID) G {
 	uids, views := g.Views()
 	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
 }
@@ -619,7 +619,7 @@ func (cl GameClient[G, P]) FinishTurnHandler(action func(G, *gin.Context, User) 
 		np.reset()
 		g.SetCurrentPlayers(np)
 
-		if err := cl.Commit(ctx, g, cu); err != nil {
+		if err := cl.commit(ctx, g, cu); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -703,8 +703,8 @@ func (g Game[P]) CurrentPlayerFor(u User) P {
 	return g.PlayerByPID(i.ToPID())
 }
 
-func (g *Game[P]) SetCurrentPlayers(ps ...Playerer) {
-	g.CPIDS = pie.Map(ps, func(p Playerer) PID { return p.getPID() })
+func (g *Game[P]) SetCurrentPlayers(ps ...P) {
+	g.CPIDS = pie.Map(ps, func(p P) PID { return p.getPID() })
 }
 
 func (g Game[P]) isCurrentPlayer(cu User) bool {
@@ -801,7 +801,7 @@ func (cl GameClient[G, P]) endGame(ctx *gin.Context, g G, cu User) {
 
 	g.getHeader().Undo.Commit()
 	err = cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
+		if err := cl.txSave(ctx, tx, g, cu); err != nil {
 			return err
 		}
 

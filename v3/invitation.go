@@ -297,7 +297,7 @@ func (cl GameClient[G, P]) acceptHandler() gin.HandlerFunc {
 		cl.Log.Debugf("g: %#v", g)
 
 		if err := cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := cl.SaveGameIn(ctx, tx, g, cu); err != nil {
+			if err := cl.txSave(ctx, tx, g, cu); err != nil {
 				return err
 			}
 			return cl.deleteInvitationIn(ctx, tx, inv.ID)
@@ -368,24 +368,24 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl GameClient[G, P]) Commit(ctx context.Context, g G, cu User) error {
+func (cl GameClient[G, P]) commit(ctx context.Context, g G, cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	g.getHeader().Undo.Commit()
-	return cl.Save(ctx, g, cu)
+	return cl.save(ctx, g, cu)
 }
 
-func (cl GameClient[G, P]) Save(ctx context.Context, g G, u User) error {
+func (cl GameClient[G, P]) save(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.SaveGameIn(ctx, tx, g, u)
+		return cl.txSave(ctx, tx, g, u)
 	})
 }
 
-func (cl GameClient[G, P]) SaveGameIn(ctx context.Context, tx *firestore.Transaction, g G, u User) error {
+func (cl GameClient[G, P]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

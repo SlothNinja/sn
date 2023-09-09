@@ -35,7 +35,7 @@ func VersionID() string {
 	return os.Getenv(GAE_VERSION)
 }
 
-func (cl Client) RequireLogin(ctx *gin.Context) (User, error) {
+func (cl *Client) RequireLogin(ctx *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -47,7 +47,7 @@ func (cl Client) RequireLogin(ctx *gin.Context) (User, error) {
 	return cu, nil
 }
 
-func (cl Client) RequireAdmin(ctx *gin.Context) (User, error) {
+func (cl *Client) RequireAdmin(ctx *gin.Context) (User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

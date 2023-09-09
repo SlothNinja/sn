@@ -30,7 +30,7 @@ type Data struct {
 	UpdatedAt          time.Time
 }
 
-func (cl Client) cuHandler() gin.HandlerFunc {
+func (cl *Client) cuHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)

@@ -121,7 +121,7 @@ func Panicf(fmt string, args ...interface{}) {
 }
 
 func panicf(skip int, tmpl string, args ...interface{}) {
-	log.Printf(panicLabel+" "+caller(skip)+tmpl, args...)
+	log.Panicf(panicLabel+" "+caller(skip)+tmpl, args...)
 }
 
 func caller(skip int) string {
@@ -143,7 +143,7 @@ func Printf(fmt string, args ...interface{}) {
 }
 
 func NewLogClient(parent string, opts ...option.ClientOption) (*LogClient, error) {
-	if !isProduction() {
+	if !IsProduction() {
 		return new(LogClient), nil
 	}
 	cl, err := logging.NewClient(context.Background(), parent, opts...)
@@ -164,14 +164,14 @@ type Logger struct {
 }
 
 func (cl *LogClient) Logger(logID string, opts ...logging.LoggerOption) *Logger {
-	if !isProduction() {
+	if !IsProduction() {
 		return new(Logger)
 	}
 	return &Logger{logID: logID, Logger: cl.Client.Logger(logID, opts...)}
 }
 
 func (l *Logger) Debugf(tmpl string, args ...interface{}) {
-	if !isProduction() {
+	if !IsProduction() {
 		debugf(3, tmpl, args...)
 		return
 	}
@@ -188,14 +188,14 @@ func (l *Logger) Debugf(tmpl string, args ...interface{}) {
 }
 
 func (l *Logger) StandardLogger(s logging.Severity) *log.Logger {
-	if !isProduction() || l == nil {
+	if !IsProduction() || l == nil {
 		return log.New(os.Stdout, "", 0)
 	}
 	return l.Logger.StandardLogger(s)
 }
 
 func (l *Logger) Infof(tmpl string, args ...interface{}) {
-	if !isProduction() {
+	if !IsProduction() {
 		infof(3, tmpl, args...)
 		return
 	}
@@ -214,7 +214,7 @@ func (l *Logger) Infof(tmpl string, args ...interface{}) {
 }
 
 func (l *Logger) Warningf(tmpl string, args ...interface{}) {
-	if !isProduction() {
+	if !IsProduction() {
 		warningf(3, tmpl, args...)
 		return
 	}
@@ -233,7 +233,7 @@ func (l *Logger) Warningf(tmpl string, args ...interface{}) {
 }
 
 func (l *Logger) Errorf(tmpl string, args ...interface{}) {
-	if !isProduction() {
+	if !IsProduction() {
 		errorf(3, tmpl, args...)
 		return
 	}
@@ -252,7 +252,7 @@ func (l *Logger) Errorf(tmpl string, args ...interface{}) {
 }
 
 func (l *Logger) Panicf(tmpl string, args ...interface{}) {
-	if !isProduction() {
+	if !IsProduction() {
 		panicf(3, tmpl, args...)
 		return
 	}
@@ -263,12 +263,12 @@ func (l *Logger) Panicf(tmpl string, args ...interface{}) {
 		return
 	}
 
-	l.StandardLogger(logging.Error).Printf(debugLabel+" "+caller(3)+tmpl, args...)
+	l.StandardLogger(logging.Error).Panicf(debugLabel+" "+caller(3)+tmpl, args...)
 }
 
 // IsProduction returns true if NODE_ENV environment variable is equal to "production".
 // GAE sets NODE_ENV environement to "production" on deployment.
 // NODE_ENV can be overridden in app.yaml configuration.
-func isProduction() bool {
-	return os.Getenv(nodeEnv) == production
-}
+// func isProduction() bool {
+// 	return os.Getenv(nodeEnv) == production
+// }
