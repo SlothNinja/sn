@@ -57,11 +57,11 @@ const stackKind = "Stack"
 // 	return cl.Collection(stackKind).Doc(fmt.Sprintf("%s-%d", id, uid))
 // }
 
-func (cl GameClient[G, P]) StackDocRef(id string, uid UID) *firestore.DocumentRef {
+func (cl *GameClient[P, S]) StackDocRef(id string, uid UID) *firestore.DocumentRef {
 	return cl.StackCollectionRef().Doc(fmt.Sprintf("%s-%d", id, uid))
 }
 
-func (cl GameClient[G, P]) StackCollectionRef() *firestore.CollectionRef {
+func (cl *GameClient[P, S]) StackCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(stackKind)
 }
 
@@ -69,7 +69,7 @@ func getID(ctx *gin.Context) string {
 	return ctx.Param("id")
 }
 
-func (cl GameClient[G, P]) getStack(ctx *gin.Context, uid UID) (s Stack, err error) {
+func (cl *GameClient[P, S]) getStack(ctx *gin.Context, uid UID) (s Stack, err error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

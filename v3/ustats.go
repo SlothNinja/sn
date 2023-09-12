@@ -85,11 +85,11 @@ func newUStat(uid UID, maxPlayers int) UStat {
 	}
 }
 
-func (cl GameClient[G, P]) ustatDocRef(uid UID) *firestore.DocumentRef {
+func (cl *GameClient[P, S]) ustatDocRef(uid UID) *firestore.DocumentRef {
 	return cl.FS.Collection(ustatsKind).Doc(fmt.Sprintf("%d", uid))
 }
 
-func (g Game[P]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
+func (g *Game[P, S]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
 	var ustats = make([]UStat, len(stats))
 	for i := range stats {
 		ustats[i] = g.updateUStat(stats[i], pstats[i], uids[i])
@@ -97,28 +97,28 @@ func (g Game[P]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []USta
 	return ustats
 }
 
-func (g Game[P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
+func (g *Game[P, S]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 	stat.Played[0]++
-	stat.Played[g.NumPlayers]++
-	for _, id := range g.WinnerIDS {
+	stat.Played[g.Header.NumPlayers]++
+	for _, id := range g.Header.WinnerIDS {
 		if id == uid {
 			stat.Won[0]++
-			stat.Won[g.NumPlayers]++
+			stat.Won[g.Header.NumPlayers]++
 			break
 		}
 	}
 
 	stat.Moves[0] += pstats.Moves
-	stat.Moves[g.NumPlayers] += pstats.Moves
+	stat.Moves[g.Header.NumPlayers] += pstats.Moves
 
 	stat.Think[0] += pstats.Think
-	stat.Think[g.NumPlayers] += pstats.Think
+	stat.Think[g.Header.NumPlayers] += pstats.Think
 
 	stat.Scored[0] += int64(pstats.Score)
-	stat.Scored[g.NumPlayers] += int64(pstats.Score)
+	stat.Scored[g.Header.NumPlayers] += int64(pstats.Score)
 
 	stat.Finish[0] += int64(pstats.Finish)
-	stat.Finish[g.NumPlayers] += int64(pstats.Finish)
+	stat.Finish[g.Header.NumPlayers] += int64(pstats.Finish)
 
 	if stat.Played[0] != 0 {
 		stat.WinPercentage[0] = float32(stat.Won[0]) / float32(stat.Played[0])
@@ -132,24 +132,25 @@ func (g Game[P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 		stat.ThinkAvg[0] = stat.Think[0] / time.Duration(stat.Moves[0])
 	}
 
-	if stat.Played[g.NumPlayers] > 0 {
-		stat.WinPercentage[g.NumPlayers] = float32(stat.Won[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
-		stat.FinishAvg[g.NumPlayers] = float32(stat.Finish[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
-		stat.ScoreAvg[g.NumPlayers] = float32(stat.Scored[g.NumPlayers]) / float32(stat.Played[g.NumPlayers])
+	numPlayers := g.Header.NumPlayers
+	if stat.Played[numPlayers] > 0 {
+		stat.WinPercentage[numPlayers] = float32(stat.Won[numPlayers]) / float32(stat.Played[numPlayers])
+		stat.FinishAvg[numPlayers] = float32(stat.Finish[numPlayers]) / float32(stat.Played[numPlayers])
+		stat.ScoreAvg[numPlayers] = float32(stat.Scored[numPlayers]) / float32(stat.Played[numPlayers])
 	}
 
-	if g.NumPlayers != 0 {
-		stat.ExpectedWinPercentage[g.NumPlayers] = 1.0 / float32(g.NumPlayers)
+	if numPlayers != 0 {
+		stat.ExpectedWinPercentage[numPlayers] = 1.0 / float32(numPlayers)
 	}
 
-	if stat.Moves[g.NumPlayers] != 0 {
-		stat.ThinkAvg[g.NumPlayers] = stat.Think[g.NumPlayers] / time.Duration(stat.Moves[g.NumPlayers])
+	if stat.Moves[numPlayers] != 0 {
+		stat.ThinkAvg[numPlayers] = stat.Think[numPlayers] / time.Duration(stat.Moves[numPlayers])
 	}
 	return stat
 
 }
 
-func (cl GameClient[G, P]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
+func (cl *GameClient[P, S]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
 	Debugf(msgEnter)
 	Debugf(msgExit)
 
@@ -174,7 +175,7 @@ func (cl GameClient[G, P]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...U
 	return ustats, nil
 }
 
-func (cl GameClient[G, P]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
+func (cl *GameClient[P, S]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
 	t := time.Now()
 	for _, ustat := range ustats {
 		ustat.UpdatedAt = t

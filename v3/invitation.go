@@ -28,19 +28,19 @@ func updateTime() (t time.Time) { return }
 
 type Invitation struct{ Header }
 
-func (cl GameClient[G, P]) invitationDocRef(id string) *firestore.DocumentRef {
+func (cl *GameClient[P, S]) invitationDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationCollectionRef().Doc(id)
 }
 
-func (cl GameClient[G, P]) invitationCollectionRef() *firestore.CollectionRef {
+func (cl *GameClient[P, S]) invitationCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(invitationKind)
 }
 
-func (cl GameClient[G, P]) hashDocRef(id string) *firestore.DocumentRef {
+func (cl *GameClient[P, S]) hashDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationDocRef(id).Collection(hashKind).Doc("hash")
 }
 
-func (cl GameClient[G, P]) abortHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) abortHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -67,7 +67,7 @@ func (cl GameClient[G, P]) abortHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl GameClient[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
+func (cl *GameClient[P, S]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -87,7 +87,7 @@ func (cl GameClient[G, P]) getInvitation(ctx *gin.Context) (Invitation, error) {
 	return inv, nil
 }
 
-func (cl GameClient[G, P]) getHash(ctx context.Context, id string) ([]byte, error) {
+func (cl *GameClient[P, S]) getHash(ctx context.Context, id string) ([]byte, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -108,13 +108,13 @@ func (cl GameClient[G, P]) getHash(ctx context.Context, id string) ([]byte, erro
 	return hash, nil
 }
 
-func (cl GameClient[G, P]) deleteInvitation(ctx context.Context, id string) error {
+func (cl *GameClient[P, S]) deleteInvitation(ctx context.Context, id string) error {
 	return cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		return cl.deleteInvitationIn(ctx, tx, id)
 	})
 }
 
-func (cl GameClient[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
+func (cl *GameClient[P, S]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
 	ref := cl.invitationDocRef(id)
 	if err := tx.Delete(ref); err != nil {
 		return err
@@ -126,7 +126,7 @@ func (cl GameClient[G, P]) deleteInvitationIn(ctx context.Context, tx *firestore
 	return nil
 }
 
-func (cl GameClient[G, P]) newInvitationHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -138,7 +138,7 @@ func (cl GameClient[G, P]) newInvitationHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl GameClient[G, P]) createInvitationHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -235,7 +235,7 @@ func FromForm(ctx *gin.Context, cu User) (Invitation, []byte, error) {
 	return inv, hash, nil
 }
 
-func (cl GameClient[G, P]) acceptHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -288,7 +288,7 @@ func (cl GameClient[G, P]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		g := newGame[G]()
+		g := new(Game[P, S])
 		cp := g.Start(&(inv.Header))
 		if err != nil {
 			JErr(ctx, err)
@@ -325,7 +325,7 @@ func (h Header) startGameMessage(pid PID) string {
 		h.Title, h.NameFor(pid))
 }
 
-func (cl GameClient[G, P]) dropHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -368,15 +368,15 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl GameClient[G, P]) commit(ctx context.Context, g G, cu User) error {
+func (cl *GameClient[P, S]) commit(ctx context.Context, g *Game[P, S], cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.getHeader().Undo.Commit()
+	g.Header.Undo.Commit()
 	return cl.save(ctx, g, cu)
 }
 
-func (cl GameClient[G, P]) save(ctx context.Context, g G, u User) error {
+func (cl *GameClient[P, S]) save(ctx context.Context, g *Game[P, S], u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -385,35 +385,36 @@ func (cl GameClient[G, P]) save(ctx context.Context, g G, u User) error {
 	})
 }
 
-func (cl GameClient[G, P]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u User) error {
+func (cl *GameClient[P, S]) txSave(ctx context.Context, tx *firestore.Transaction, g *Game[P, S], u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.getHeader().UpdatedAt = updateTime()
+	g.Header.UpdatedAt = updateTime()
 
-	if err := tx.Set(cl.gameDocRef(g.getHeader().ID, g.getHeader().Rev()), g); err != nil {
+	if err := tx.Set(cl.gameDocRef(g.Header.ID, g.Header.Rev()), g); err != nil {
 		return err
 	}
 
-	if err := tx.Set(cl.committedDocRef(g.getHeader().ID), g); err != nil {
+	if err := tx.Set(cl.committedDocRef(g.Header.ID), g); err != nil {
 		return err
 	}
 
-	uids, views := g.Views()
-	for i, v := range views {
-		cl.Log.Debugf("v: %#v", v)
-		if err := tx.Set(cl.viewDocRef(g.getHeader().ID, uids[i]), v); err != nil {
-			return err
+	if viewer, ok := any(g).(Viewer[P, S]); ok {
+		uids, views := viewer.Views()
+		for i, v := range views {
+			if err := tx.Set(cl.viewDocRef(g.Header.ID, uids[i]), v); err != nil {
+				return err
+			}
 		}
 	}
 	return cl.clearCached(ctx, g, u)
 }
 
-func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error {
+func (cl *GameClient[P, S]) clearCached(ctx context.Context, g *Game[P, S], cu User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	refs := cl.cachedCollectionRef(g.getHeader().ID).DocumentRefs(ctx)
+	refs := cl.cachedCollectionRef(g.Header.ID).DocumentRefs(ctx)
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -433,7 +434,7 @@ func (cl GameClient[G, P]) clearCached(ctx context.Context, g G, cu User) error 
 		}
 	}
 
-	_, err := cl.StackDocRef(g.getHeader().ID, cu.ID).Delete(ctx)
+	_, err := cl.StackDocRef(g.Header.ID, cu.ID).Delete(ctx)
 
 	return err
 }
@@ -455,7 +456,7 @@ type detail struct {
 	WP     float32
 }
 
-func (cl GameClient[G, P]) detailsHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) detailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)

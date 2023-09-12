@@ -40,8 +40,8 @@ func (p *Player) reset() {
 }
 
 type Playerer interface {
-	Copy() Playerer
-	New() Playerer
+	// Copy() Playerer
+	// New() Playerer
 
 	getPID() PID
 	setPID(PID)
@@ -131,7 +131,7 @@ func (p Player) compareByScore(p2 Playerer) Comparison {
 	}
 }
 
-func (g Game[P]) determinePlaces() (Results, error) {
+func (g *Game[P, S]) determinePlaces() (Results, error) {
 	rs := make(Results)
 	sortedByScore(g.Players, Descending)
 	ps := g.copyPlayers()
@@ -141,7 +141,7 @@ func (g Game[P]) determinePlaces() (Results, error) {
 		// Find all players tied at place
 		found := pie.Filter(ps, func(p P) bool { return ps[0].compareByScore(p) == EqualTo })
 		// Get user keys for found players
-		rs[place] = pie.Map(found, func(p P) UID { return g.UIDFor(p.getPID()) })
+		rs[place] = pie.Map(found, func(p P) UID { return g.Header.UIDFor(p.getPID()) })
 		// Set ps to remaining players
 		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.getPID() == p2.getPID() })
 		// Above does not guaranty order so sort

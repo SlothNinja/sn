@@ -124,7 +124,7 @@ func NewMessage(u User, text string) Message {
 // 	}
 // }
 
-func (cl GameClient[G, P]) updateReadHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) updateReadHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -148,7 +148,7 @@ func (cl GameClient[G, P]) updateReadHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl GameClient[G, P]) updateRead(ctx *gin.Context, uid UID, read []string) error {
+func (cl *GameClient[P, S]) updateRead(ctx *gin.Context, uid UID, read []string) error {
 	for _, mid := range read {
 		if _, err := cl.messageDocRef(getID(ctx), mid).Update(ctx, []firestore.Update{
 			{Path: "Read", Value: firestore.ArrayUnion(uid)},
@@ -289,7 +289,7 @@ func getMessage(ctx *gin.Context) (Message, error) {
 // 	})
 // }
 
-func (cl GameClient[G, P]) addMessageHandler() gin.HandlerFunc {
+func (cl *GameClient[P, S]) addMessageHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
@@ -308,7 +308,7 @@ func (cl GameClient[G, P]) addMessageHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl GameClient[G, P]) validateAddMessage(ctx *gin.Context) (Message, error) {
+func (cl *GameClient[P, S]) validateAddMessage(ctx *gin.Context) (Message, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -328,7 +328,7 @@ func (cl GameClient[G, P]) validateAddMessage(ctx *gin.Context) (Message, error)
 	return m, nil
 }
 
-func (cl GameClient[G, P]) addMessage(ctx *gin.Context, m Message) error {
+func (cl *GameClient[P, S]) addMessage(ctx *gin.Context, m Message) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 

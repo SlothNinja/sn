@@ -23,7 +23,7 @@ type Client struct {
 	options
 }
 
-type GameClient[G Gamer[G, P], P Playerer] struct {
+type GameClient[P Playerer, S any] struct {
 	*Client
 	FS *firestore.Client
 }
@@ -100,8 +100,8 @@ func (cl *Client) initMode() *Client {
 	return cl
 }
 
-func NewGameClient[G Gamer[G, P], P Playerer](ctx context.Context, opts ...Option) GameClient[G, P] {
-	cl := GameClient[G, P]{Client: NewClient(ctx, opts...)}
+func NewGameClient[P Playerer, S any](ctx context.Context, opts ...Option) *GameClient[P, S] {
+	cl := &GameClient[P, S]{Client: NewClient(ctx, opts...)}
 
 	var err error
 	if cl.FS, err = firestore.NewClient(ctx, cl.projectID); err != nil {
@@ -126,7 +126,7 @@ func (cl *Client) addRoutes() *Client {
 }
 
 // AddRoutes addes routing for game.
-func (cl GameClient[G, P]) addRoutes(prefix string) GameClient[G, P] {
+func (cl *GameClient[P, S]) addRoutes(prefix string) *GameClient[P, S] {
 	////////////////////////////////////////////
 	// Invitation Group
 	iGroup := cl.Router.Group(prefix + "/invitation")
@@ -184,7 +184,7 @@ func (cl GameClient[G, P]) addRoutes(prefix string) GameClient[G, P] {
 	return cl
 }
 
-func (cl GameClient[G, P]) Close() error {
+func (cl *GameClient[P, S]) Close() error {
 	cl.FS.Close()
 	return cl.Client.Close()
 }
