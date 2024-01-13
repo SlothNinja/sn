@@ -14,45 +14,58 @@ type Player struct {
 	Stats
 }
 
-func (p Player) getPID() PID {
+func (p *Player) getPID() PID {
 	return p.ID
 }
 
 func (p *Player) setPID(pid PID) {
-	p.ID = pid
+	if p != nil {
+		p.ID = pid
+	}
 }
 
-func (p Player) getPassed() bool {
+func (p *Player) getPassed() bool {
 	return p.Passed
 }
 
-func (p Player) getPerformedAction() bool {
+func (p *Player) getScore() int64 {
+	return p.Score
+}
+
+func (p *Player) getPerformedAction() bool {
 	return p.PerformedAction
 }
 
-func (p Player) getStats() *Stats {
+func (p *Player) getStats() *Stats {
+	if p == nil {
+		return nil
+	}
 	return &(p.Stats)
 }
 
 func (p *Player) reset() {
-	p.PerformedAction = false
-	p.Passed = false
+	if p != nil {
+		p.PerformedAction = false
+		p.Passed = false
+	}
 }
 
-type Playerer interface {
-	// Copy() Playerer
-	// New() Playerer
+type Ptr[T any] interface {
+	*T
+}
+
+type Playerer[T any] interface {
+	Ptr[T]
 
 	getPID() PID
 	setPID(PID)
-	getPassed() bool
 	getPerformedAction() bool
 	getStats() *Stats
+	getScore() int64
 	reset()
-	compareByScore(Playerer) Comparison
 }
 
-type Players[P Playerer] []P
+type Players[T any, P Playerer[T]] []P
 
 type Comparison int
 
@@ -66,72 +79,73 @@ const (
 
 type UIndex int
 
-func (uIndex UIndex) ToPID() PID {
+func (uIndex UIndex) toPID() PID {
 	return PID(uIndex + 1)
 }
 
 type PID int
 
-func (pid PID) ToIndex() UIndex {
+func (pid PID) toUIndex() UIndex {
 	return UIndex(pid - 1)
 }
 
 const NoPID PID = 0
 
 func (h Header) NameFor(pid PID) string {
-	return h.UserNames[pid.ToIndex()]
+	return h.UserNames[pid.toUIndex()]
 }
 
 func (h Header) UIDFor(pid PID) UID {
-	return h.UserIDS[pid.ToIndex()]
+	return h.UserIDS[pid.toUIndex()]
 }
 
-func (h Header) NameByUID(uid UID) string {
-	return h.NameByIndex(h.IndexFor(uid))
-}
+// func (h Header) NameByUID(uid UID) string {
+// 	return h.NameByIndex(h.indexFor(uid))
+// }
 
-func (h Header) NameByIndex(i UIndex) string {
-	if i >= 0 && i < UIndex(len(h.UserNames)) {
-		return h.UserNames[i]
-	}
-	return ""
-}
-func (h Header) IndexFor(uid UID) UIndex {
+// func (h Header) NameByIndex(i UIndex) string {
+// 	if i >= 0 && i < UIndex(len(h.UserNames)) {
+// 		return h.UserNames[i]
+// 	}
+// 	return ""
+// }
+
+func (h Header) indexFor(uid UID) UIndex {
 	return UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
 }
 
 func (h Header) EmailFor(pid PID) string {
-	return h.UserEmails[pid.ToIndex()]
+	return h.UserEmails[pid.toUIndex()]
 }
 
 func (h Header) EmailNotificationsFor(pid PID) bool {
-	return h.UserEmailNotifications[pid.ToIndex()]
+	return h.UserEmailNotifications[pid.toUIndex()]
 }
 
 func (h Header) GravTypeFor(pid PID) string {
-	return h.UserGravTypes[pid.ToIndex()]
+	return h.UserGravTypes[pid.toUIndex()]
 }
 
 // NotFound indicates a value (e.g., player) was not found in the collection.
 const NotFound = -1
 const UIndexNotFound UIndex = -1
 
-func sortedByScore[P Playerer](ps []P, c Comparison) {
-	sort.SliceStable(ps, func(i, j int) bool { return ps[i].compareByScore(ps[j]) == c })
+func sortedByScore[T any, P Playerer[T]](ps []P, c Comparison) {
+	sort.SliceStable(ps, func(i, j int) bool { return compareByScore(ps[i], ps[j]) == c })
 }
 
-func (p Player) compareByScore(p2 Playerer) Comparison {
+func compareByScore[T any, P Playerer[T]](p1, p2 P) Comparison {
 	switch {
-	case p.Score < p2.getStats().Score:
+	case p1.getScore() < p2.getStats().Score:
 		return LessThan
-	case p.Score > p2.getStats().Score:
+	case p1.getScore() > p2.getStats().Score:
 		return GreaterThan
 	default:
 		return EqualTo
 	}
 }
 
-func (g *Game[P, S]) determinePlaces() (Results, error) {
+func (g *Game[S, T, P]) determinePlaces() (Results, error) {
 	rs := make(Results)
 	sortedByScore(g.Players, Descending)
 	ps := g.copyPlayers()
@@ -139,7 +153,7 @@ func (g *Game[P, S]) determinePlaces() (Results, error) {
 	place := 1
 	for len(ps) != 0 {
 		// Find all players tied at place
-		found := pie.Filter(ps, func(p P) bool { return ps[0].compareByScore(p) == EqualTo })
+		found := pie.Filter(ps, func(p2 P) bool { return compareByScore(ps[0], p2) == EqualTo })
 		// Get user keys for found players
 		rs[place] = pie.Map(found, func(p P) UID { return g.Header.UIDFor(p.getPID()) })
 		// Set ps to remaining players

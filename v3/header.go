@@ -316,7 +316,7 @@ func (h *Header) HasUser(u User) bool {
 }
 
 func (h *Header) RemoveUser(u2 User) {
-	i := h.IndexFor(u2.ID)
+	i := h.indexFor(u2.ID)
 	if i == UIndexNotFound {
 		return
 	}

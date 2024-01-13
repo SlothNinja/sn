@@ -36,22 +36,23 @@ type glog []entry
 type Entry map[string]any
 type Line map[string]any
 
-func (g *Game[P, S]) NewEntry(template string, e Entry, l Line) {
+func (g *Game[S, T, P]) NewEntry(template string, e Entry, l Line) {
 	g.Log = append(g.Log, entry{
 		Data:  e,
 		Lines: []line{line{Template: template, Data: l}},
 	})
 }
 
-func (g *Game[P, S]) AppendEntry(template string, l Line) {
-	if lastIndex := len(g.Log) - 1; lastIndex >= 0 {
-		g.Log[lastIndex].Lines = append(g.Log[lastIndex].Lines, line{Template: template, Data: l})
+func (g *Game[S, T, P]) AppendEntry(template string, l Line) {
+	lastIndex := len(g.Log) - 1
+	if lastIndex < 0 {
+		Warningf("no log entry to append to")
 		return
 	}
-	Warningf("no log entry to append to")
+	g.Log[lastIndex].Lines = append(g.Log[lastIndex].Lines, line{Template: template, Data: l})
 }
 
-func (g *Game[P, S]) AppendLine(l Line) {
+func (g *Game[S, T, P]) AppendLine(l Line) {
 	lastEntryIndex := len(g.Log) - 1
 	if lastEntryIndex < 0 {
 		Warningf("no log line to append to")

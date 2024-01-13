@@ -26,15 +26,15 @@ func newEloDefault(uid UID) Elo {
 	return Elo{ID: uid, Rating: defaultRating}
 }
 
-func (cl *GameClient[P, S]) EloDocRef(uid UID) *firestore.DocumentRef {
+func (cl *GameClient[GT, G]) EloDocRef(uid UID) *firestore.DocumentRef {
 	return cl.eloCollectionRef().Doc(fmt.Sprintf("%d", uid))
 }
 
-func (cl *GameClient[P, S]) eloCollectionRef() *firestore.CollectionRef {
+func (cl *GameClient[GT, G]) eloCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(eloKind)
 }
 
-func (cl *GameClient[P, S]) EloHistoryRef(uid UID) *firestore.CollectionRef {
+func (cl *GameClient[GT, G]) EloHistoryRef(uid UID) *firestore.CollectionRef {
 	return cl.EloDocRef(uid).Collection(historyKind)
 }
 
@@ -140,7 +140,7 @@ func updateEloFor(uid1 UID, elos eloMap, places PlacesMap) int {
 	return elos[uid1].Rating + delta
 }
 
-func (cl *GameClient[P, S]) SaveElosIn(tx *firestore.Transaction, elos []Elo) error {
+func (cl *GameClient[GT, G]) SaveElosIn(tx *firestore.Transaction, elos []Elo) error {
 	for _, elo := range elos {
 		if err := tx.Set(cl.EloDocRef(elo.ID), elo); err != nil {
 			return err
@@ -208,7 +208,7 @@ func (cl *GameClient[P, S]) SaveElosIn(tx *firestore.Transaction, elos []Elo) er
 
 // Update pulls current Elo from db and provides rating updates and deltas per results for users associated with uids.
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uids
-func (cl *GameClient[P, S]) UpdateElo(ctx *gin.Context, uids []UID, places PlacesMap) ([]Elo, []Elo, error) {
+func (cl *GameClient[GT, G]) UpdateElo(ctx *gin.Context, uids []UID, places PlacesMap) ([]Elo, []Elo, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 

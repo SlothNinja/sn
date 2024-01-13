@@ -85,11 +85,11 @@ func newUStat(uid UID, maxPlayers int) UStat {
 	}
 }
 
-func (cl *GameClient[P, S]) ustatDocRef(uid UID) *firestore.DocumentRef {
+func (cl *GameClient[GT, G]) ustatDocRef(uid UID) *firestore.DocumentRef {
 	return cl.FS.Collection(ustatsKind).Doc(fmt.Sprintf("%d", uid))
 }
 
-func (g *Game[P, S]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
+func (g *Game[S, T, P]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
 	var ustats = make([]UStat, len(stats))
 	for i := range stats {
 		ustats[i] = g.updateUStat(stats[i], pstats[i], uids[i])
@@ -97,7 +97,7 @@ func (g *Game[P, S]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []
 	return ustats
 }
 
-func (g *Game[P, S]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
+func (g *Game[S, T, P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 	stat.Played[0]++
 	stat.Played[g.Header.NumPlayers]++
 	for _, id := range g.Header.WinnerIDS {
@@ -150,7 +150,7 @@ func (g *Game[P, S]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 
 }
 
-func (cl *GameClient[P, S]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
+func (cl *GameClient[GT, G]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
 	Debugf(msgEnter)
 	Debugf(msgExit)
 
@@ -175,7 +175,7 @@ func (cl *GameClient[P, S]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...
 	return ustats, nil
 }
 
-func (cl *GameClient[P, S]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
+func (cl *GameClient[GT, G]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
 	t := time.Now()
 	for _, ustat := range ustats {
 		ustat.UpdatedAt = t
