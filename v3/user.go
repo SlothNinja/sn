@@ -10,7 +10,7 @@ import (
 )
 
 type User struct {
-	ID UID
+	ID UID `datastore:"-"`
 	Data
 }
 
