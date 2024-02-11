@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -19,14 +20,16 @@ import (
 )
 
 const (
-	gameKind      = "Game"
-	cachedKind    = "Cached"
-	viewKind      = "View"
-	committedKind = "Committed"
-	indexKind     = "Index"
-	readKind      = "Read"
-	mlogKind      = "MLog"
-	messagesKind  = "Messages"
+	gameKind       = "Game"
+	revKind        = "Rev"
+	cacheKind      = "CacheFor"
+	fullCachedKind = "FullCacheFor"
+	viewKind       = "ViewFor"
+	committedKind  = "Committed"
+	indexKind      = "Index"
+	readKind       = "Read"
+	mlogKind       = "MLog"
+	messagesKind   = "Messages"
 )
 
 type Game[S, PT any, P Playerer[PT]] struct {
@@ -87,46 +90,65 @@ func (g *Game[S, T, P]) getHeader() *Header {
 // 	Views() ([]UID, []*Game[S, T, P])
 // }
 
-func (cl *GameClient[GT, G]) gameDocRef(id string, rev int) *firestore.DocumentRef {
-	return cl.gameCollectionRef().Doc(fmt.Sprintf("%s-%d", id, rev))
+func (cl *GameClient[GT, G]) revCollectionRef(id string) *firestore.CollectionRef {
+	return cl.gameDocRef(id).Collection(revKind)
+}
+
+func (cl *GameClient[GT, G]) revDocRef(id string, rev int) *firestore.DocumentRef {
+	return cl.revCollectionRef(id).Doc(strconv.Itoa(rev))
+}
+
+func (cl *GameClient[GT, G]) gameDocRef(id string) *firestore.DocumentRef {
+	return cl.gameCollectionRef().Doc(id)
 }
 
 func (cl *GameClient[GT, G]) gameCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(gameKind)
 }
 
-func (cl *GameClient[GT, G]) cachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
-	// return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d", rev, uid))
-	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d", uid)).Collection("Current").Doc(fmt.Sprintf("%d", rev))
+func (cl *GameClient[GT, G]) cachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
+	return cl.cachedCollectionRef(id, rev, uid).Doc(strconv.Itoa(crev))
 }
 
-func (cl *GameClient[GT, G]) fullyCachedDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+func (cl *GameClient[GT, G]) cachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
+	return cl.revDocRef(id, rev).Collection(cacheKind).Doc(strconv.Itoa(int(uid))).Collection(revKind)
+}
+
+func (cl *GameClient[GT, G]) fullyCachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
 	// return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d-0", rev, uid))
-	return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d", uid)).Collection("Current").Doc(fmt.Sprintf("%d", rev)).Collection("Full").Doc("0")
+	return cl.fullyCachedCollectionRef(id, rev, uid).Doc(strconv.Itoa(crev))
 }
 
-func (cl *GameClient[GT, G]) cachedCollectionRef(id string) *firestore.CollectionRef {
-	return cl.committedDocRef(id).Collection(cachedKind)
+func (cl *GameClient[GT, G]) fullyCachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
+	return cl.revDocRef(id, rev).Collection(fullCachedKind).Doc(strconv.Itoa(int(uid))).Collection(revKind)
 }
 
-func (cl *GameClient[GT, G]) messageDocRef(gid, mid string) *firestore.DocumentRef {
+func (cl *GameClient[GT, G]) messageDocRef(gid string, mid string) *firestore.DocumentRef {
 	return cl.messagesCollectionRef(gid).Doc(mid)
 }
 
-func (cl *GameClient[GT, G]) messagesCollectionRef(id string) *firestore.CollectionRef {
-	return cl.committedDocRef(id).Collection(messagesKind)
+func (cl *GameClient[GT, G]) messagesCollectionRef(gid string) *firestore.CollectionRef {
+	return cl.committedCollectionRef().Doc(gid).Collection(messagesKind)
 }
 
-func (cl *GameClient[GT, G]) committedDocRef(id string) *firestore.DocumentRef {
-	return cl.FS.Collection(committedKind).Doc(id)
+func (cl *GameClient[GT, G]) committedDocRef(gid string, rev int) *firestore.DocumentRef {
+	return cl.committedCollectionRef().Doc(fmt.Sprintf("%s-%d", gid, rev))
+}
+
+func (cl *GameClient[GT, G]) committedCollectionRef() *firestore.CollectionRef {
+	return cl.FS.Collection(gameKind)
 }
 
 func (cl *GameClient[GT, G]) indexDocRef(id string) *firestore.DocumentRef {
 	return cl.FS.Collection(indexKind).Doc(id)
 }
 
-func (cl *GameClient[GT, G]) viewDocRef(id string, uid UID) *firestore.DocumentRef {
-	return cl.committedDocRef(id).Collection(viewKind).Doc(fmt.Sprintf("%d", uid))
+func (cl *GameClient[GT, G]) viewCollectionRef(id string, rev int) *firestore.CollectionRef {
+	return cl.revDocRef(id, rev).Collection(viewKind)
+}
+
+func (cl *GameClient[GT, G]) viewDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
+	return cl.viewCollectionRef(id, rev).Doc(strconv.Itoa(int(uid)))
 }
 
 // type Gamers []Gamer
@@ -275,13 +297,13 @@ func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
 			return
 		}
 
-		g, err := cl.getCommitted(ctx)
+		h, err := cl.getHeader(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		err = cl.clearCached(ctx, g, cu)
+		err = cl.clearCached(ctx, h.ID, h.Undo.Committed, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -291,32 +313,24 @@ func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
 	}
 }
 
-type stackFunc func(*Stack) bool
-
-var NoUndo stackFunc = func(s *Stack) bool { return false }
-var Undo stackFunc = (*Stack).Undo
-var Redo stackFunc = (*Stack).Redo
+// type stackFunc func(*Stack) bool
+//
+// var NoUndo stackFunc = func(s *Stack) bool { return false }
+// var Undo stackFunc = (*Stack).Undo
+// var Redo stackFunc = (*Stack).Redo
 
 func (cl *GameClient[GT, G]) undoHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		id := getID(ctx)
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			cl.Log.Warningf(err.Error())
 		}
 
-		ref := cl.StackDocRef(id, cu.ID)
-		snap, err := ref.Get(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		var stack Stack
-		err = snap.DataTo(&stack)
+		gid := getID(ctx)
+		stack, err := cl.getStack(ctx, gid, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -328,7 +342,7 @@ func (cl *GameClient[GT, G]) undoHandler() gin.HandlerFunc {
 			return
 		}
 
-		_, err = ref.Set(ctx, &stack)
+		err = cl.setStack(ctx, gid, cu.ID, stack)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -343,24 +357,16 @@ func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		id := getID(ctx)
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
-			cl.Log.Warningf(err.Error())
-		}
-
-		ref := cl.StackDocRef(id, cu.ID)
-		snap, err := ref.Get(ctx)
-		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		var stack Stack
-		err = snap.DataTo(&stack)
+		gid := getID(ctx)
+		stack, err := cl.getStack(ctx, gid, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
-			return
 		}
 
 		// do nothing if stack does not change
@@ -369,7 +375,7 @@ func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
 			return
 		}
 
-		_, err = ref.Set(ctx, &stack)
+		err = cl.setStack(ctx, gid, cu.ID, stack)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -425,6 +431,11 @@ func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
 		if err != nil {
 			JErr(ctx, err)
 			return
+		}
+
+		cl.Log.Debugf("obj: %#v", obj)
+		if obj.Rev <= 0 {
+			ctx.JSON(http.StatusOK, nil)
 		}
 
 		g, err := cl.getRev(ctx, obj.Rev-1)
@@ -489,7 +500,7 @@ func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, rev int) (G, error) {
 	defer cl.Log.Debugf(msgExit)
 
 	id := getID(ctx)
-	snap, err := cl.gameDocRef(id, rev).Get(ctx)
+	snap, err := cl.revDocRef(id, rev).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +513,8 @@ func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, rev int) (G, error) {
 	return g, nil
 }
 
-func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
+// func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
+func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -516,7 +528,9 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackF
 		return g, nil
 	}
 
-	undo, err := cl.getStack(ctx, cu.ID)
+	gid := getID(ctx)
+	undo, err := cl.getStack(ctx, gid, cu.ID)
+
 	// if undo stack not found, then simply return g which is committed game
 	if status.Code(err) == codes.NotFound {
 		return g, nil
@@ -525,15 +539,16 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackF
 		return g, err
 	}
 
-	if len(action) == 1 {
-		action[0](&undo)
-	}
+	// cached state same as committed, though undo stack may differ.
+	// thus, replace undo stack and return
 	if undo.Current == undo.Committed {
 		g.getHeader().Undo = undo
 		return g, nil
 	}
 
-	g, err = cl.getCached(ctx, undo.Current, cu.ID)
+	// cached state differs from committ.
+	// thus, get cached state, replace undo stack and return
+	g, err = cl.getCached(ctx, g.getHeader().Rev(), cu.ID, undo.Current)
 	if err != nil {
 		return g, err
 	}
@@ -541,12 +556,12 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackF
 	return g, nil
 }
 
-func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID) (G, error) {
+func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID, crev int) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	id := getID(ctx)
-	snap, err := cl.fullyCachedDocRef(id, rev, uid).Get(ctx)
+	snap, err := cl.fullyCachedDocRef(id, rev, uid, crev).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -568,8 +583,12 @@ func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	id := getID(ctx)
-	snap, err := cl.committedDocRef(id).Get(ctx)
+	h, err := cl.getHeader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	snap, err := cl.revDocRef(h.ID, h.Rev()).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -579,8 +598,27 @@ func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
 		return nil, err
 	}
 
-	g.getHeader().ID = id
+	g.getHeader().ID = h.ID
 	return g, nil
+}
+
+func (cl *GameClient[GT, G]) getHeader(ctx *gin.Context) (Header, error) {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	id := getID(ctx)
+	snap, err := cl.indexDocRef(id).Get(ctx)
+	if err != nil {
+		return Header{}, err
+	}
+
+	var h Header
+	if err := snap.DataTo(&h); err != nil {
+		return Header{}, err
+	}
+
+	h.ID = id
+	return h, nil
 }
 
 // func newGame[G any]() G {
@@ -592,16 +630,17 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
+	h := g.getHeader()
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), g); err != nil {
+		if err := tx.Set(cl.fullyCachedDocRef(h.ID, h.Committed(), u.ID, h.Rev()), g); err != nil {
 			return err
 		}
 
-		if err := tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Rev(), u.ID), viewFor(g, u.ID)); err != nil {
+		if err := tx.Set(cl.cachedDocRef(h.ID, h.Committed(), u.ID, h.Rev()), viewFor(g, u.ID)); err != nil {
 			return err
 		}
 
-		return tx.Set(cl.StackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
+		return tx.Set(cl.StackDocRef(h.ID, u.ID), h.Undo)
 	})
 }
 
@@ -652,7 +691,8 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
-			cl.Log.Warningf(err.Error())
+			JErr(ctx, err)
+			return
 		}
 
 		g, err := cl.getGame(ctx, cu)
@@ -667,8 +707,6 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		cl.Log.Debugf("cpid: %v npid: %v, err: %v", cpid, npid, err)
-
 		cpStats := g.statsFor(cpid)
 		cpStats.Moves++
 		cpStats.Think += time.Since(g.getHeader().UpdatedAt)
@@ -680,7 +718,8 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 		g.reset(npid)
 		g.SetCurrentPlayers(npid)
 
-		if err := cl.commit(ctx, g, cu); err != nil {
+		err = cl.commit(ctx, g, cu)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -1076,7 +1115,7 @@ func (g *Game[S, T, P]) Start(h Header) PID {
 
 	cp := pie.First(g.Players)
 	g.SetCurrentPlayers(cp.getPID())
-	g.NewEntry("start-game", nil, Line{"PIDS": g.Players.PIDS()})
+	g.NewEntry("start-game", H{"PIDS": g.Players.PIDS()})
 	Warningf("g.Log: %#v", g.Log)
 	return cp.getPID()
 }

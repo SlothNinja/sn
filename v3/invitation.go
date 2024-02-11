@@ -367,12 +367,17 @@ func (h Header) dropGameMessage(u User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl *GameClient[GT, G]) commit(ctx context.Context, g G, cu User) error {
+func (cl *GameClient[GT, G]) commit(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.getHeader().Undo.Commit()
-	return cl.save(ctx, g, cu)
+	h := g.getHeader()
+	if err := cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID); err != nil {
+		return err
+	}
+
+	h.Undo.Commit()
+	return cl.save(ctx, g, u)
 }
 
 func (cl *GameClient[GT, G]) save(ctx context.Context, g G, u User) error {
@@ -388,37 +393,35 @@ func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transacti
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	g.getHeader().UpdatedAt = updateTime()
+	h := g.getHeader()
+	h.UpdatedAt = updateTime()
 
-	if err := tx.Set(cl.gameDocRef(g.getHeader().ID, g.getHeader().Rev()), g); err != nil {
+	if err := tx.Set(cl.revDocRef(h.ID, h.Rev()), g); err != nil {
 		return err
 	}
 
-	if err := tx.Set(cl.committedDocRef(g.getHeader().ID), g); err != nil {
+	if err := tx.Set(cl.indexDocRef(h.ID), h); err != nil {
 		return err
 	}
 
-	if err := tx.Set(cl.indexDocRef(g.getHeader().ID), g.getHeader()); err != nil {
-		return err
-	}
-
-	// by implementing view, game may provide customized view for each user.
-	// primarily used to ensure hidden game information not leaked to users via provided json objects
+	// By implementing Views interface, game may provide a customized view for each user.
+	// Primarily used to ensure hidden game information not leaked to users via json objects
+	// sent to browsers.
 	uids, views := g.Views()
 	for i, v := range views {
-		if err := tx.Set(cl.viewDocRef(g.getHeader().ID, uids[i]), v); err != nil {
+		if err := tx.Set(cl.viewDocRef(h.ID, h.Rev(), uids[i]), v); err != nil {
 			return err
 		}
 	}
 
-	return cl.clearCached(ctx, g, u)
+	return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
 }
 
-func (cl *GameClient[GT, G]) clearCached(ctx context.Context, g G, cu User) error {
+func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	refs := cl.cachedCollectionRef(g.getHeader().ID).DocumentRefs(ctx)
+	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -428,19 +431,29 @@ func (cl *GameClient[GT, G]) clearCached(ctx context.Context, g G, cu User) erro
 			return err
 		}
 
-		// if current user is admin, clear all cached docs
-		// otherwise clear only if cached doc is for current user
-		if cu.Admin || docRefFor(ref, cu.ID) {
-			_, err = ref.Delete(ctx)
-			if err != nil {
-				return err
-			}
+		_, err = ref.Delete(ctx)
+		if err != nil {
+			return err
 		}
 	}
 
-	_, err := cl.StackDocRef(g.getHeader().ID, cu.ID).Delete(ctx)
+	refs = cl.fullyCachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
+	for {
+		ref, err := refs.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
 
-	return err
+		_, err = ref.Delete(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return cl.deleteStack(ctx, gid, uid)
 }
 
 func docRefFor(ref *firestore.DocumentRef, uid UID) bool {

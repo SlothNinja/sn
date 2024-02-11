@@ -1,6 +1,7 @@
 package sn
 
 import (
+	"context"
 	"fmt"
 
 	"cloud.google.com/go/firestore"
@@ -57,30 +58,54 @@ const stackKind = "Stack"
 // 	return cl.Collection(stackKind).Doc(fmt.Sprintf("%s-%d", id, uid))
 // }
 
-func (cl *GameClient[GT, G]) StackDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.StackCollectionRef().Doc(gid).Collection("For").Doc(fmt.Sprintf("%d", uid))
+func getID(ctx *gin.Context) string {
+	return ctx.Param("id")
 }
 
 func (cl *GameClient[GT, G]) StackCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection(stackKind)
 }
 
-func getID(ctx *gin.Context) string {
-	return ctx.Param("id")
+func (cl *GameClient[GT, G]) StackDocRef(gid string, uid UID) *firestore.DocumentRef {
+	return cl.StackCollectionRef().Doc(gid).Collection("For").Doc(fmt.Sprintf("%d", uid))
 }
 
-func (cl *GameClient[GT, G]) getStack(ctx *gin.Context, uid UID) (s Stack, err error) {
+func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (Stack, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var snap *firestore.DocumentSnapshot
-	if snap, err = cl.StackDocRef(getID(ctx), uid).Get(ctx); err != nil {
+	snap, err := cl.StackDocRef(gid, uid).Get(ctx)
+	if err != nil {
 		return Stack{}, err
 	}
 
-	if err = snap.DataTo(&s); err != nil {
+	var stack Stack
+	err = snap.DataTo(&stack)
+	if err != nil {
 		return Stack{}, err
 	}
 
-	return s, err
+	return stack, err
+}
+
+func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, s Stack) error {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	_, err := cl.StackDocRef(gid, uid).Set(ctx, &s)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UID) error {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	_, err := cl.StackDocRef(gid, uid).Delete(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -17,6 +17,7 @@ var (
 	ErrActionNotPerformed = fmt.Errorf("player has yet to perform an action: %w", ErrValidation)
 	ErrNotAdmin           = fmt.Errorf("current user is not admin: %w", ErrValidation)
 	ErrNotCurrentPlayer   = fmt.Errorf("current user is not current player: %w", ErrValidation)
+	ErrNotLoggedIn        = fmt.Errorf("must login to access resource: %w", ErrValidation)
 )
 
 func JErr(ctx *gin.Context, err error) {

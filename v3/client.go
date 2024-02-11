@@ -59,7 +59,7 @@ func NewClient(ctx context.Context, opts ...Option) *Client {
 		initCache().
 		initRouter().
 		initSession(ctx).
-		initMode().
+		initEnvironment().
 		addRoutes()
 }
 
@@ -82,15 +82,16 @@ func (cl *Client) initRouter() *Client {
 	return cl
 }
 
-func (cl *Client) initMode() *Client {
+func (cl *Client) initEnvironment() *Client {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
 	if IsProduction() {
-		gin.SetMode(gin.ReleaseMode)
 		cl.Router.TrustedPlatform = gin.PlatformGoogleAppEngine
 		return cl
 	}
 
 	// Is development
-	gin.SetMode(gin.DebugMode)
 	config := cors.DefaultConfig()
 	config.AllowOrigins = cl.corsAllow
 	config.AllowCredentials = true

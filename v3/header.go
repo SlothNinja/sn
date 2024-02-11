@@ -49,6 +49,10 @@ func (h Header) Rev() int {
 	return h.Undo.Current
 }
 
+func (h Header) Committed() int {
+	return h.Undo.Committed
+}
+
 // func (h *Header) Load(ps []datastore.Property) error {
 // 	return datastore.LoadStruct(h, ps)
 // }

@@ -2,7 +2,6 @@ package sn
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
 
@@ -40,9 +39,8 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (User, error) {
 	defer cl.Log.Debugf(msgExit)
 
 	cu, err := cl.getCU(ctx)
-	cl.Log.Debugf("cu: %#v", cu)
 	if err != nil {
-		return User{}, fmt.Errorf("must login to access resource: %w", err)
+		return User{}, ErrNotLoggedIn
 	}
 	return cu, nil
 }
@@ -52,8 +50,8 @@ func (cl *Client) RequireAdmin(ctx *gin.Context) (User, error) {
 	defer cl.Log.Debugf(msgExit)
 
 	admin, err := cl.GetAdmin(ctx)
-	if !admin {
-		return User{}, fmt.Errorf("must be admin access resource: %w", err)
+	if !admin || err != nil {
+		return User{}, ErrNotAdmin
 	}
 
 	return cl.RequireLogin(ctx)
