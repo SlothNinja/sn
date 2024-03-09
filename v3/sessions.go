@@ -180,7 +180,7 @@ func (cl *Client) initSession(ctx context.Context) *Client {
 		opts = sessions.Options{
 			Domain: "slothninja.com",
 			Path:   "/",
-			MaxAge: 60 * 60 * 24, // 1 Day in seconds
+			MaxAge: 60 * 60 * 24 * 30, // 1 Day in seconds
 			Secure: true,
 		}
 	}
