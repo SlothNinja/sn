@@ -296,7 +296,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(ctx, tx, g, cu); err != nil {
+			if err := cl.txSave(tx, g, cu); err != nil {
 				return err
 			}
 			return cl.deleteInvitationIn(ctx, tx, inv.ID)
@@ -371,13 +371,27 @@ func (cl *GameClient[GT, G]) commit(ctx context.Context, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	h := g.getHeader()
-	if err := cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID); err != nil {
-		return err
-	}
+	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+		h := g.getHeader()
 
-	h.Undo.Commit()
-	return cl.save(ctx, g, u)
+		gc, err := cl.txGetCommitted(tx, h.ID)
+		if err != nil {
+			return err
+		}
+
+		if h.UpdatedAt != gc.getHeader().UpdatedAt {
+			return fmt.Errorf("unexpected game change")
+		}
+
+		oldCommit := h.Undo.Committed
+		h.Undo.Commit()
+
+		if err := cl.txSave(tx, g, u); err != nil {
+			return err
+		}
+
+		return cl.clearCached(ctx, h.ID, oldCommit, u.ID)
+	})
 }
 
 func (cl *GameClient[GT, G]) save(ctx context.Context, g G, u User) error {
@@ -385,11 +399,15 @@ func (cl *GameClient[GT, G]) save(ctx context.Context, g G, u User) error {
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.txSave(ctx, tx, g, u)
+		h := g.getHeader()
+		if err := cl.txSave(tx, g, u); err != nil {
+			return err
+		}
+		return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
 	})
 }
 
-func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u User) error {
+func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
@@ -413,8 +431,7 @@ func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transacti
 			return err
 		}
 	}
-
-	return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
+	return nil
 }
 
 func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {

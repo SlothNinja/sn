@@ -14,7 +14,10 @@ type Player struct {
 	Stats
 }
 
-func (p *Player) getPID() PID {
+func (p *Player) PID() PID {
+	if p == nil {
+		return NoPID
+	}
 	return p.ID
 }
 
@@ -50,6 +53,10 @@ func (p *Player) reset() {
 	}
 }
 
+func (p *Player) equal(op *Player) bool {
+	return p != nil && op != nil && p.ID == op.ID
+}
+
 type Ptr[T any] interface {
 	*T
 }
@@ -57,7 +64,7 @@ type Ptr[T any] interface {
 type Playerer[T any] interface {
 	Ptr[T]
 
-	getPID() PID
+	PID() PID
 	setPID(PID)
 	getPerformedAction() bool
 	getStats() *Stats
@@ -79,24 +86,24 @@ const (
 
 type UIndex int
 
-func (uIndex UIndex) toPID() PID {
+func (uIndex UIndex) ToPID() PID {
 	return PID(uIndex + 1)
 }
 
 type PID int
 
-func (pid PID) toUIndex() UIndex {
+func (pid PID) ToUIndex() UIndex {
 	return UIndex(pid - 1)
 }
 
 const NoPID PID = 0
 
 func (h Header) NameFor(pid PID) string {
-	return h.UserNames[pid.toUIndex()]
+	return h.UserNames[pid.ToUIndex()]
 }
 
 func (h Header) UIDFor(pid PID) UID {
-	return h.UserIDS[pid.toUIndex()]
+	return h.UserIDS[pid.ToUIndex()]
 }
 
 // func (h Header) NameByUID(uid UID) string {
@@ -110,20 +117,20 @@ func (h Header) UIDFor(pid PID) UID {
 // 	return ""
 // }
 
-func (h Header) indexFor(uid UID) UIndex {
+func (h Header) IndexFor(uid UID) UIndex {
 	return UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
 }
 
 func (h Header) EmailFor(pid PID) string {
-	return h.UserEmails[pid.toUIndex()]
+	return h.UserEmails[pid.ToUIndex()]
 }
 
 func (h Header) EmailNotificationsFor(pid PID) bool {
-	return h.UserEmailNotifications[pid.toUIndex()]
+	return h.UserEmailNotifications[pid.ToUIndex()]
 }
 
 func (h Header) GravTypeFor(pid PID) string {
-	return h.UserGravTypes[pid.toUIndex()]
+	return h.UserGravTypes[pid.ToUIndex()]
 }
 
 // NotFound indicates a value (e.g., player) was not found in the collection.
@@ -155,9 +162,9 @@ func (g *Game[S, T, P]) determinePlaces() (Results, error) {
 		// Find all players tied at place
 		found := pie.Filter(ps, func(p2 P) bool { return compareByScore(ps[0], p2) == EqualTo })
 		// Get user keys for found players
-		rs[place] = pie.Map(found, func(p P) UID { return g.Header.UIDFor(p.getPID()) })
+		rs[place] = pie.Map(found, func(p P) UID { return g.Header.UIDFor(p.PID()) })
 		// Set ps to remaining players
-		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.getPID() == p2.getPID() })
+		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.PID() == p2.PID() })
 		// Above does not guaranty order so sort
 		sortedByScore(ps, Descending)
 		// Increase place by number of players added to current place

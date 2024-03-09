@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/logging v1.7.0
 	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/barkimedes/go-deepcopy v0.0.0-20220514131651-17c30cfc62df
-	github.com/elliotchance/pie/v2 v2.2.0
+	github.com/elliotchance/pie/v2 v2.8.0
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.8.1
