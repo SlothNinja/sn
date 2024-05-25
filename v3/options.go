@@ -179,6 +179,7 @@ func (cl *Client) GetBackEndPort() string {
 	return cl.backEndPort
 }
 
+// WithSecretsProjectID used to set the SECRETS_PROJECT_ID option for the client
 func WithSecretsProjectID(id string) Option {
 	return func(cl *Client) *Client {
 		cl.secretsProjectID = id
@@ -193,6 +194,7 @@ func getSecretsProjectID() string {
 	return "user-slothninja-games"
 }
 
+// GetSecretsProjectID used to get the SECRETS_PROJECT_ID option specified for the client
 func (cl *Client) GetSecretsProjectID() string {
 	return cl.secretsProjectID
 }

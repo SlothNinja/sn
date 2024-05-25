@@ -34,10 +34,10 @@ type Header struct {
 	Status                    Status
 	Undo                      Stack
 	OptString                 string
-	StartedAt                 time.Time `firestore:",serverTimestamp"`
-	EndedAt                   time.Time `firestore:",serverTimestamp"`
-	CreatedAt                 time.Time `firestore:",serverTimestamp"`
-	UpdatedAt                 time.Time `firestore:",serverTimestamp"`
+	StartedAt                 time.Time
+	EndedAt                   time.Time
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 	Private                   bool
 }
 
@@ -167,12 +167,11 @@ type Strings []string
 type ColorMaps map[Type][]Color
 
 var defaultColorMaps = ColorMaps{
-	Confucius:  []Color{Yellow, Purple, Green, White, Black},
-	Tammany:    []Color{Red, Yellow, Purple, Black, Brown},
-	ATF:        []Color{Red, Green, Purple},
-	GOT:        []Color{Yellow, Purple, Green, Black},
-	Indonesia:  []Color{White, Black, Green, Purple, Orange},
-	Gettysburg: []Color{White, Black},
+	Confucius: []Color{Yellow, Purple, Green, White, Black},
+	Tammany:   []Color{Red, Yellow, Purple, Black, Brown},
+	ATF:       []Color{Red, Green, Purple},
+	GOT:       []Color{Yellow, Purple, Green, Black},
+	Indonesia: []Color{White, Black, Green, Purple, Orange},
 }
 
 // func (h *Header) DefaultColorMap() []Color {
@@ -303,7 +302,7 @@ func (h *Header) CanAdd(u User) bool {
 	return len(h.UserIDS) < h.NumPlayers && !pie.Contains(h.UserIDS, u.ID)
 }
 
-func (h *Header) CanDropout(u User) bool {
+func (h *Header) CanDropout(u *User) bool {
 	return h.Status == Recruiting && pie.Contains(h.UserIDS, u.ID)
 }
 
@@ -315,11 +314,11 @@ func (h *Header) Stub() string {
 // 	return h.Password != ""
 // }
 
-func (h *Header) HasUser(u User) bool {
+func (h *Header) HasUser(u *User) bool {
 	return pie.Contains(h.UserIDS, u.ID)
 }
 
-func (h *Header) RemoveUser(u2 User) {
+func (h *Header) RemoveUser(u2 *User) {
 	i := h.IndexFor(u2.ID)
 	if i == UIndexNotFound {
 		return
@@ -347,7 +346,7 @@ func (h *Header) RemoveUser(u2 User) {
 		h.UserGravTypes = append(h.UserGravTypes[:i], h.UserGravTypes[i+1:]...)
 	}
 }
-func (h *Header) AddUser(u User) {
+func (h *Header) AddUser(u *User) {
 	h.UserIDS = append(h.UserIDS, u.ID)
 	// h.UserKeys = append(h.UserKeys, u.Key)
 	h.UserNames = append(h.UserNames, u.Name)
@@ -357,7 +356,7 @@ func (h *Header) AddUser(u User) {
 	h.UserGravTypes = append(h.UserGravTypes, u.GravType)
 }
 
-func (h *Header) AddCreator(u User) {
+func (h *Header) AddCreator(u *User) {
 	// h.Creator = u
 	h.CreatorID = u.ID
 	// h.CreatorKey = u.Key
@@ -368,7 +367,7 @@ func (h *Header) AddCreator(u User) {
 	h.CreatorGravType = u.GravType
 }
 
-func (h *Header) AddUsers(us ...User) {
+func (h *Header) AddUsers(us ...*User) {
 	for _, u := range us {
 		h.AddUser(u)
 	}

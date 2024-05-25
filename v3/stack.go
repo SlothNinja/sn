@@ -35,6 +35,7 @@ func (s *Stack) Reset() bool {
 	return reset
 }
 
+// Redo moves the undo stack forward
 func (s *Stack) Redo() bool {
 	redo := s.Updated > s.Committed && s.Current < s.Updated
 	if redo {
@@ -104,8 +105,5 @@ func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UI
 	defer cl.Log.Debugf(msgExit)
 
 	_, err := cl.StackDocRef(gid, uid).Delete(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

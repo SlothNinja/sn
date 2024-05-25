@@ -18,7 +18,7 @@ import (
 const invitationKind = "Invitation"
 const hashKind = "Hash"
 
-func updateTime() (t time.Time) { return }
+// func updateTime() (t time.Time) { return }
 
 // type Invitation[I any] interface {
 // 	FromForm(*gin.Context, User) (I, []byte, error)
@@ -57,7 +57,9 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 		}
 
 		inv.Status = Aborted
-		inv.UpdatedAt = updateTime()
+		now := time.Now()
+		inv.UpdatedAt = now
+		inv.EndedAt = now
 		if _, err := cl.invitationDocRef(inv.ID).Set(ctx, inv); err != nil {
 			JErr(ctx, err)
 			return
@@ -156,7 +158,9 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+			t := time.Now()
+			inv.CreatedAt, inv.UpdatedAt = t, t
 			ref := cl.invitationCollectionRef().NewDoc()
 			if err := tx.Create(ref, inv); err != nil {
 				return err
@@ -171,8 +175,9 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		var inv2 Invitation
+		inv2 := inv
 		inv2.Title = randomdata.SillyName()
+		cl.Log.Debugf("inv2: %#v", inv2)
 		ctx.JSON(http.StatusOK, gin.H{
 			"Invitation": inv2,
 			"Message":    fmt.Sprintf("%s created game %q", cu.Name, inv.Title),
@@ -180,7 +185,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	}
 }
 
-func FromForm(ctx *gin.Context, cu User) (Invitation, []byte, error) {
+func FromForm(ctx *gin.Context, cu *User) (Invitation, []byte, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -278,7 +283,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if !start {
-			inv.UpdatedAt = updateTime()
+			inv.UpdatedAt = time.Now()
 			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 			if err != nil {
 				JErr(ctx, err)
@@ -295,8 +300,8 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(tx, g, cu); err != nil {
+		if err := cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+			if err := cl.txSave(c, tx, g, cu); err != nil {
 				return err
 			}
 			return cl.deleteInvitationIn(ctx, tx, inv.ID)
@@ -315,7 +320,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 	}
 }
 
-func (h Header) acceptGameMessage(u User) string {
+func (h Header) acceptGameMessage(u *User) string {
 	return fmt.Sprintf("%s accepted game invitation: %s", u.Name, h.Title)
 }
 
@@ -347,9 +352,8 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		Debugf("ID: %#v", inv.ID)
 		if len(inv.UserIDS) != 0 {
-			inv.UpdatedAt = updateTime()
+			inv.UpdatedAt = time.Now()
 			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 		} else {
 			err = cl.deleteInvitation(ctx, inv.ID)
@@ -363,56 +367,65 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 	}
 }
 
-func (h Header) dropGameMessage(u User) string {
+func (h Header) dropGameMessage(u *User) string {
 	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
 }
 
-func (cl *GameClient[GT, G]) commit(ctx context.Context, g G, u User) error {
+func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		h := g.getHeader()
-
-		gc, err := cl.txGetCommitted(tx, h.ID)
-		if err != nil {
-			return err
-		}
-
-		if h.UpdatedAt != gc.getHeader().UpdatedAt {
-			return fmt.Errorf("unexpected game change")
-		}
-
-		oldCommit := h.Undo.Committed
-		h.Undo.Commit()
-
-		if err := cl.txSave(tx, g, u); err != nil {
-			return err
-		}
-
-		return cl.clearCached(ctx, h.ID, oldCommit, u.ID)
+		return cl.txCommit(c, tx, g, u)
 	})
 }
 
-func (cl *GameClient[GT, G]) save(ctx context.Context, g G, u User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		h := g.getHeader()
-		if err := cl.txSave(tx, g, u); err != nil {
-			return err
-		}
-		return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
-	})
-}
-
-func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u User) error {
+func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
 	h := g.getHeader()
-	h.UpdatedAt = updateTime()
+
+	gc, err := cl.txGetCommitted(tx, h.ID)
+	if err != nil {
+		return err
+	}
+
+	if h.UpdatedAt != gc.getHeader().UpdatedAt {
+		return fmt.Errorf("unexpected game change")
+	}
+
+	if err := cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID); err != nil {
+		return err
+	}
+
+	h.Undo.Commit()
+	return cl.txSave(ctx, tx, g, u)
+}
+
+func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+		//h := g.getHeader()
+		//hid := h.ID
+		//committed := h.Undo.Committed
+
+		// if err := cl.txSave(tx, g, u); err != nil {
+		// 	return err
+		// }
+		// return cl.clearCached(tx, hid, committed, u.ID)
+		return cl.txSave(c, tx, g, u)
+	})
+}
+
+func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
+	cl.Log.Debugf(msgEnter)
+	defer cl.Log.Debugf(msgExit)
+
+	h := g.getHeader()
+	h.UpdatedAt = time.Now()
 
 	if err := tx.Set(cl.revDocRef(h.ID, h.Rev()), g); err != nil {
 		return err
@@ -431,7 +444,7 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u User) erro
 			return err
 		}
 	}
-	return nil
+	return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
 }
 
 func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {

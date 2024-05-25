@@ -1,7 +1,6 @@
 package sn
 
 import (
-	"context"
 	"os"
 
 	"github.com/mailjet/mailjet-apiv3-go"
@@ -11,7 +10,8 @@ func getMJKeys() (string, string) {
 	return os.Getenv("MJ_API_KEY_PUB"), os.Getenv("MJ_API_KEY_PRIV")
 }
 
-func SendMessages(c context.Context, msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
+// SendMessages sends email messages
+func SendMessages(msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 

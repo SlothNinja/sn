@@ -22,7 +22,7 @@ type Message struct {
 	UpdatedAt        time.Time
 }
 
-func NewMessage(u User, text string) Message {
+func NewMessage(u *User, text string) Message {
 	t := time.Now()
 	return Message{
 		Text:             text,
@@ -200,7 +200,7 @@ func getMessage(ctx *gin.Context) (Message, error) {
 
 	var obj struct {
 		Text    string   `json:"text"`
-		Creator User     `json:"creator"`
+		Creator *User    `json:"creator"`
 		Read    []string `json:"read"`
 	}
 

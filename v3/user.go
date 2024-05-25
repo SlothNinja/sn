@@ -9,12 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// User represents a user
 type User struct {
 	ID UID `datastore:"-"`
-	Data
+	userData
 }
 
-type Data struct {
+type userData struct {
 	Name               string
 	LCName             string
 	Email              string
@@ -60,10 +61,10 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 	}
 }
 
-const FSTokenKey = "FS_TOKEN_KEY"
+const fsTokenKey = "FS_TOKEN_KEY"
 
 func getFSTokenKey() string {
-	return os.Getenv(FSTokenKey)
+	return os.Getenv(fsTokenKey)
 }
 
 type UID int64

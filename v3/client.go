@@ -1,3 +1,4 @@
+// SN implements services for SlothNinja Games Website
 package sn
 
 import (

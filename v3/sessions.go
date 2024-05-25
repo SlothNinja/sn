@@ -16,6 +16,7 @@ func init() {
 	gob.RegisterName("SessionToken", SessionToken{})
 }
 
+// ErrMissingToken signals that expected session token is missing
 var ErrMissingToken = fmt.Errorf("missing token")
 
 const (
@@ -54,7 +55,7 @@ func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	token, ok := cl.Session(ctx).GetUserToken()
+	token, ok := cl.session(ctx).GetUserToken()
 	if !ok {
 		return 0, ErrMissingToken
 	}
@@ -62,24 +63,24 @@ func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	return token.ID, nil
 }
 
-func (cl *Client) getCU(ctx *gin.Context) (User, error) {
+func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	token, ok := cl.Session(ctx).GetUserToken()
+	token, ok := cl.session(ctx).GetUserToken()
 	cl.Log.Debugf("token: %#v", token)
 	if !ok {
-		return User{}, ErrMissingToken
+		return nil, ErrMissingToken
 	}
 
-	return User{ID: token.ID, Data: token.Data}, nil
+	return &User{ID: token.ID, userData: token.Data}, nil
 }
 
-func (cl *Client) GetAdmin(ctx *gin.Context) (bool, error) {
+func (cl *Client) getAdmin(ctx *gin.Context) (bool, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	token, ok := cl.Session(ctx).GetUserToken()
+	token, ok := cl.session(ctx).GetUserToken()
 	if !ok {
 		return false, ErrMissingToken
 	}
@@ -90,10 +91,10 @@ func (cl *Client) GetAdmin(ctx *gin.Context) (bool, error) {
 type SessionToken struct {
 	ID   UID
 	Sub  string
-	Data Data
+	Data userData
 }
 
-func (s session) NewToken(uid UID, sub string, data Data) SessionToken {
+func (s session) NewToken(uid UID, sub string, data userData) SessionToken {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -110,25 +111,25 @@ func (s session) GetUserToken() (SessionToken, bool) {
 	return token, ok
 }
 
-func (s session) GetNewUser() (User, error) {
+func (s session) GetNewUser() (*User, error) {
 	token, ok := s.GetUserToken()
 	if !ok {
-		return User{}, errors.New("token not found")
+		return &User{}, errors.New("token not found")
 	}
 
 	if token.ID != 0 {
-		return User{}, errors.New("user present, no need for new one.")
+		return &User{}, errors.New("user present, no need for new one.")
 	}
 
 	var err error
-	u := User{ID: token.ID}
+	u := &User{ID: token.ID}
 	u.Name, err = s.getNewUserName()
 	if err != nil {
-		return User{}, err
+		return nil, err
 	}
 	u.Email, err = s.getNewUserEmail()
 	if err != nil {
-		return User{}, err
+		return nil, err
 	}
 	return u, nil
 }
@@ -157,7 +158,7 @@ func (s session) getNewUserName() (string, error) {
 	return name, nil
 }
 
-func (cl *Client) Session(ctx *gin.Context) session {
+func (cl *Client) session(ctx *gin.Context) session {
 	return session{sessions.Default(ctx)}
 }
 
@@ -180,7 +181,7 @@ func (cl *Client) initSession(ctx context.Context) *Client {
 		opts = sessions.Options{
 			Domain: "slothninja.com",
 			Path:   "/",
-			MaxAge: 60 * 60 * 24 * 30, // 1 Day in seconds
+			MaxAge: 60 * 60 * 24 * 30, // 1 Month in seconds
 			Secure: true,
 		}
 	}

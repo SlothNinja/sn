@@ -29,7 +29,6 @@ const (
 	panicLabel   = "[PANIC]"
 
 	nodeEnv = "NODE_ENV"
-	// production = "production"
 )
 
 var DefaultLevel = LvlDebug
