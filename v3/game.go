@@ -58,6 +58,7 @@ type Gamer[G any] interface {
 
 type Viewer[T any] interface {
 	Views() ([]UID, []*T)
+	ViewFor(UID) *T
 }
 
 type Starter interface {
@@ -311,7 +312,12 @@ func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		g, err := cl.getGame(ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -350,7 +356,12 @@ func (cl *GameClient[GT, G]) undoHandler() gin.HandlerFunc {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		g, err := cl.getGame(ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -383,7 +394,12 @@ func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		g, err := cl.getGame(ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -419,7 +435,7 @@ func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cuid, err := cl.RequireAdmin(ctx)
+		cu, err := cl.RequireAdmin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -446,13 +462,13 @@ func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.save(ctx, g, cuid)
+		err = cl.save(ctx, g, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -461,7 +477,7 @@ func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		cuid, err := cl.RequireAdmin(ctx)
+		cu, err := cl.RequireAdmin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -487,13 +503,13 @@ func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.save(ctx, g, cuid)
+		err = cl.save(ctx, g, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -679,7 +695,7 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 			return err
 		}
 
-		if err := tx.Set(cl.cachedDocRef(h.ID, h.Committed(), u.ID, h.Rev()), viewFor(g, u.ID)); err != nil {
+		if err := tx.Set(cl.cachedDocRef(h.ID, h.Committed(), u.ID, h.Rev()), g.ViewFor(u.ID)); err != nil {
 			return err
 		}
 
@@ -687,15 +703,15 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 	})
 }
 
-func viewFor[T any](g Viewer[T], uid1 UID) *T {
-	uids, views := g.Views()
-	if len(views) == 1 {
-		return pie.First(views)
-	}
-	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
-}
+// func viewFor[T any](g Viewer[T], uid1 UID) *T {
+// 	uids, views := g.Views()
+// 	if len(views) == 1 {
+// 		return pie.First(views)
+// 	}
+// 	return views[pie.FindFirstUsing(uids, func(uid2 UID) bool { return uid1 == uid2 })]
+// }
 
-type CachedActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) error
+type CachedActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (string, error)
 
 func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -713,7 +729,8 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 			return
 		}
 
-		if err = action(g, ctx, cu); err != nil {
+		msg, err := action(g, ctx, cu)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -724,11 +741,18 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		if len(msg) > 0 {
+			ctx.JSON(http.StatusOK, gin.H{
+				"Message": msg,
+				"Game":    g.ViewFor(cu.ID),
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
-type FinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (PID, []PID, error)
+type FinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (PID, []PID, string, error)
 
 func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -747,7 +771,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		cpid, npids, err := action(g, ctx, cu)
+		cpid, npids, msg, err := action(g, ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -770,58 +794,16 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		if len(msg) > 0 {
+			ctx.JSON(http.StatusOK, gin.H{
+				"Message": msg,
+				"Game":    g.ViewFor(cu.ID),
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
-
-// type MultiFinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, User) (PID, []PID, bool, error)
-//
-// func (cl *GameClient[GT, G]) MultiFinishTurnHandler(action MultiFinishTurnActionFunc[GT, G]) gin.HandlerFunc {
-// 	return func(ctx *gin.Context) {
-// 		cl.Log.Debugf(msgEnter)
-// 		defer cl.Log.Debugf(msgExit)
-//
-// 		cu, err := cl.RequireLogin(ctx)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		g, err := cl.getGame(ctx, cu)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		cpid, npids, done, err := action(g, ctx, cu)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		cpStats := g.statsFor(cpid)
-// 		cpStats.Moves++
-// 		cpStats.Think += time.Since(g.getHeader().UpdatedAt)
-//
-// 		if len(npids) == 0 {
-// 			cl.endGame(ctx, g, cu)
-// 			return
-// 		}
-//
-// 		if done {
-// 			pie.Each(npids, func(npid PID) { g.reset(npid) })
-// 			g.SetCurrentPlayers(npids...)
-// 		}
-//
-// 		err = cl.commit(ctx, g, cu)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		ctx.JSON(http.StatusOK, nil)
-// 	}
-// }
 
 func (g *Game[S, T, P]) playerUIDS() []UID {
 	return pie.Map(g.Players, func(p P) UID { return g.Header.UserIDS[p.PID().ToUIndex()] })

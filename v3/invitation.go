@@ -18,14 +18,6 @@ import (
 const invitationKind = "Invitation"
 const hashKind = "Hash"
 
-// func updateTime() (t time.Time) { return }
-
-// type Invitation[I any] interface {
-// 	FromForm(*gin.Context, User) (I, []byte, error)
-// 	Head() *Header
-// 	Default() I
-// }
-
 type Invitation struct{ Header }
 
 func (cl *GameClient[GT, G]) invitationDocRef(id string) *firestore.DocumentRef {
@@ -213,20 +205,6 @@ func FromForm(ctx *gin.Context, cu *User) (Invitation, []byte, error) {
 	inv.OptString = obj.OptString
 	inv.Status = Recruiting
 
-	// nv.NumPlayers = defaultPlayers
-	// f obj.NumPlayers >= minPlayers && obj.NumPlayers <= maxPlayers {
-	//        inv.NumPlayers = obj.NumPlayers
-	//
-
-	// ounds := defaultRounds
-	// f obj.RoundsPerPlayer >= minRounds && obj.RoundsPerPlayer <= maxRounds {
-	//        rounds = obj.RoundsPerPlayer
-	//
-	// nv.OptString, err = encodeOptions(rounds)
-	// f err != nil {
-	//        return nil, nil, err
-	//
-
 	var hash []byte
 	if len(obj.Password) > 0 {
 		hash, err = bcrypt.GenerateFromPassword([]byte(obj.Password), bcrypt.DefaultCost)
@@ -310,12 +288,6 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		// cl.sendTurnNotificationsTo(c, g, cp)
-		// 	err = cl.sendNotifications(c, g)
-		// 	if err != nil {
-		// 		cl.Log.Warningf(err.Error())
-		// 	}
-		//
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cpid)})
 	}
 }
@@ -408,14 +380,6 @@ func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
 	defer cl.Log.Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		//h := g.getHeader()
-		//hid := h.ID
-		//committed := h.Undo.Committed
-
-		// if err := cl.txSave(tx, g, u); err != nil {
-		// 	return err
-		// }
-		// return cl.clearCached(tx, hid, committed, u.ID)
 		return cl.txSave(c, tx, g, u)
 	})
 }
@@ -527,30 +491,5 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 			uids = append(uids, cu.ID)
 		}
 
-		// elos, err := cl.Elo.GetMulti(c, uids)
-		// if err != nil {
-		// 	JErr(c, err)
-		// 	return
-		// }
-
-		// ustats, err := cl.getUStats(c, uids...)
-		// if err != nil {
-		// 	JErr(c, err)
-		// 	return
-		// }
-
-		// details := make([]detail, len(elos))
-		// for i := range elos {
-		// 	played, won, wp := ustats[i].Played, ustats[i].Won, ustats[i].WinPercentage
-		// 	details[i] = detail{
-		// 		ID:     elos[i].ID,
-		// 		ELO:    elos[i].Rating,
-		// 		Played: played[0],
-		// 		Won:    won[0],
-		// 		WP:     wp[0],
-		// 	}
-		// }
-
-		// c.JSON(http.StatusOK, gin.H{"details": details})
 	}
 }
