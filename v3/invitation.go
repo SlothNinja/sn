@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
+	"slices"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -12,13 +12,12 @@ import (
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/api/iterator"
 )
 
 const invitationKind = "Invitation"
 const hashKind = "Hash"
 
-type Invitation struct{ Header }
+type invitation struct{ Header }
 
 func (cl *GameClient[GT, G]) invitationDocRef(id string) *firestore.DocumentRef {
 	return cl.invitationCollectionRef().Doc(id)
@@ -61,11 +60,11 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (Invitation, error) {
+func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error) {
 	cl.Log.Debugf(msgEnter)
 	defer cl.Log.Debugf(msgExit)
 
-	var inv Invitation
+	var inv invitation
 
 	id := getID(ctx)
 	snap, err := cl.invitationDocRef(id).Get(ctx)
@@ -125,7 +124,7 @@ func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 		cl.Log.Debugf(msgEnter)
 		defer cl.Log.Debugf(msgExit)
 
-		var inv Invitation
+		var inv invitation
 		inv.Title = randomdata.SillyName()
 
 		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv})
@@ -143,7 +142,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		var inv Invitation
+		var inv invitation
 		inv, hash, err := FromForm(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
@@ -177,7 +176,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	}
 }
 
-func FromForm(ctx *gin.Context, cu *User) (Invitation, []byte, error) {
+func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -191,10 +190,10 @@ func FromForm(ctx *gin.Context, cu *User) (Invitation, []byte, error) {
 
 	err := ctx.ShouldBind(&obj)
 	if err != nil {
-		return Invitation{}, nil, err
+		return invitation{}, nil, err
 	}
 
-	var inv Invitation
+	var inv invitation
 	inv.Title = cu.Name + "'s Game"
 	if obj.Title != "" {
 		inv.Title = obj.Title
@@ -209,12 +208,12 @@ func FromForm(ctx *gin.Context, cu *User) (Invitation, []byte, error) {
 	if len(obj.Password) > 0 {
 		hash, err = bcrypt.GenerateFromPassword([]byte(obj.Password), bcrypt.DefaultCost)
 		if err != nil {
-			return Invitation{}, nil, err
+			return invitation{}, nil, err
 		}
 		inv.Private = true
 	}
-	inv.AddCreator(cu)
-	inv.AddUser(cu)
+	inv.addCreator(cu)
+	inv.addUser(cu)
 	return inv, hash, nil
 }
 
@@ -254,7 +253,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		start, err := inv.AcceptWith(cu, []byte(obj.Password), hash)
+		start, err := inv.acceptWith(cu, []byte(obj.Password), hash)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -292,6 +291,45 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 	}
 }
 
+// Returns (true, nil) if game should be started
+func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	err := inv.validateAcceptWith(u, pwd, hash)
+	if err != nil {
+		return false, err
+	}
+
+	inv.addUser(u)
+	if len(inv.UserIDS) == int(inv.NumPlayers) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	switch {
+	case len(inv.UserIDS) >= int(inv.NumPlayers):
+		return fmt.Errorf("game already has the maximum number of players: %w", ErrValidation)
+	case inv.hasUser(u):
+		return fmt.Errorf("%s has already accepted this invitation: %w", u.Name, ErrValidation)
+	case len(hash) != 0:
+		err := bcrypt.CompareHashAndPassword(hash, pwd)
+		if err != nil {
+			Debugf(err.Error())
+			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
+				u.Name, inv.Title, ErrValidation)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
 func (h Header) acceptGameMessage(u *User) string {
 	return fmt.Sprintf("%s accepted game invitation: %s", u.Name, h.Title)
 }
@@ -318,7 +356,7 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = inv.Drop(cu)
+		err = inv.drop(cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -339,157 +377,70 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 	}
 }
 
-func (h Header) dropGameMessage(u *User) string {
-	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, h.Title)
-}
+func (inv *invitation) drop(u *User) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
-func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.txCommit(c, tx, g, u)
-	})
-}
-
-func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	h := g.getHeader()
-
-	gc, err := cl.txGetCommitted(tx, h.ID)
-	if err != nil {
+	if err := inv.validateDrop(u); err != nil {
 		return err
 	}
 
-	if h.UpdatedAt != gc.getHeader().UpdatedAt {
-		return fmt.Errorf("unexpected game change")
-	}
-
-	if err := cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID); err != nil {
-		return err
-	}
-
-	h.Undo.Commit()
-	return cl.txSave(ctx, tx, g, u)
+	inv.removeUser(u)
+	return nil
 }
 
-func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+func (inv *invitation) validateDrop(u *User) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.txSave(c, tx, g, u)
-	})
+	switch {
+	case inv.Status != Recruiting:
+		return fmt.Errorf("game is no longer recruiting, thus %s can't drop: %w", u.Name, ErrValidation)
+	case !inv.hasUser(u):
+		return fmt.Errorf("%s has not joined this game, thus %s can't drop: %w", u.Name, u.Name, ErrValidation)
+	}
+	return nil
 }
 
-func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	h := g.getHeader()
-	h.UpdatedAt = time.Now()
-
-	if err := tx.Set(cl.revDocRef(h.ID, h.Rev()), g); err != nil {
-		return err
-	}
-
-	if err := tx.Set(cl.indexDocRef(h.ID), h); err != nil {
-		return err
-	}
-
-	// By implementing Views interface, game may provide a customized view for each user.
-	// Primarily used to ensure hidden game information not leaked to users via json objects
-	// sent to browsers.
-	uids, views := g.Views()
-	for i, v := range views {
-		if err := tx.Set(cl.viewDocRef(h.ID, h.Rev(), uids[i]), v); err != nil {
-			return err
-		}
-	}
-	return cl.clearCached(ctx, h.ID, h.Undo.Committed, u.ID)
+func (inv *invitation) dropGameMessage(u *User) string {
+	return fmt.Sprintf("%s dropped from game invitation: %s", u.Name, inv.Title)
 }
 
-func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
-
-	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
-	for {
-		ref, err := refs.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		_, err = ref.Delete(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	refs = cl.fullyCachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
-	for {
-		ref, err := refs.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		_, err = ref.Delete(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	return cl.deleteStack(ctx, gid, uid)
+func (h *Header) hasUser(u *User) bool {
+	return pie.Contains(h.UserIDS, u.ID)
 }
 
-func docRefFor(ref *firestore.DocumentRef, uid UID) bool {
-	ss := pie.Reverse(strings.Split(ref.ID, "-"))
-	s := pie.Pop(&ss)
-	if *s == "0" {
-		s = pie.Pop(&ss)
+func (inv *invitation) removeUser(u2 *User) {
+	i := inv.IndexFor(u2.ID)
+	if i == UIndexNotFound {
+		return
 	}
-	return *s == fmt.Sprintf("%d", uid)
+
+	start := int(i)
+	end := start + 1
+
+	inv.UserIDS = slices.Delete(inv.UserIDS, start, end)
+	inv.UserNames = slices.Delete(inv.UserNames, start, end)
+	inv.UserEmails = slices.Delete(inv.UserEmails, start, end)
+	inv.UserEmailHashes = slices.Delete(inv.UserEmailHashes, start, end)
+	inv.UserEmailNotifications = slices.Delete(inv.UserEmailNotifications, start, end)
+	inv.UserGravTypes = slices.Delete(inv.UserGravTypes, start, end)
 }
 
-type detail struct {
-	ID     int64
-	ELO    int
-	Played int64
-	Won    int64
-	WP     float32
+func (inv *invitation) addUser(u *User) {
+	inv.UserIDS = append(inv.UserIDS, u.ID)
+	inv.UserNames = append(inv.UserNames, u.Name)
+	inv.UserEmails = append(inv.UserEmails, u.Email)
+	inv.UserEmailHashes = append(inv.UserEmailHashes, u.EmailHash)
+	inv.UserEmailNotifications = append(inv.UserEmailNotifications, u.EmailNotifications)
+	inv.UserGravTypes = append(inv.UserGravTypes, u.GravType)
 }
 
-func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
-
-		inv, err := cl.getInvitation(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		cu, err := cl.RequireLogin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		uids := make([]UID, len(inv.getHeader().UserIDS))
-		copy(uids, inv.getHeader().UserIDS)
-
-		if hasUID := pie.Any(inv.getHeader().UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
-			uids = append(uids, cu.ID)
-		}
-
-	}
+func (inv *invitation) addCreator(u *User) {
+	inv.CreatorID = u.ID
+	inv.CreatorName = u.Name
+	inv.CreatorEmail = u.Email
+	inv.CreatorEmailHash = u.EmailHash
+	inv.CreatorEmailNotifications = u.EmailNotifications
+	inv.CreatorGravType = u.GravType
 }

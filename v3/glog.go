@@ -23,23 +23,31 @@ type glog []entry
 // corresponds to H data map used in gin package.
 type H map[string]any
 
-func (g *Game[S, T, P]) DeepCopy() Game[S, T, P] {
-	v, err := json.Marshal(g)
+func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
+	return deepCopy(g)
+}
+
+func deepCopy[T any](obj T) T {
+	v, err := json.Marshal(obj)
 	if err != nil {
-		Errorf("unable to marshal game: %v", err)
-		panic("unable to marshal game")
+		Errorf("unable to marshal object: %v", err)
+		panic("unable to marshal object")
 	}
 
-	var g2 Game[S, T, P]
-	err = json.Unmarshal(v, &g2)
+	var obj2 T
+	err = json.Unmarshal(v, &obj2)
 	if err != nil {
 		Errorf("unable to unmarshal game: %v", err)
 		panic("unable to unmarshal game")
 	}
-	return g2
+	return obj2
 }
 
 func (g *Game[S, T, P]) NewEntry(template string, data H, updatedAt time.Time) {
+	g.newEntry(template, data, updatedAt)
+}
+
+func (g *Game[S, T, P]) newEntry(template string, data H, updatedAt time.Time) {
 	g.Log = append(g.Log, entry{Template: template, Data: data, UpdatedAt: updatedAt})
 }
 

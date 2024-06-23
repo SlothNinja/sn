@@ -3,6 +3,7 @@ package sn
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/firestore"
@@ -18,8 +19,9 @@ const historyKind = "History"
 const defaultRating = 1500
 
 type Elo struct {
-	ID     UID
-	Rating int
+	ID        UID
+	Rating    int
+	UpdatedAt time.Time
 }
 
 func newEloDefault(uid UID) Elo {
@@ -208,7 +210,7 @@ func (cl *GameClient[GT, G]) SaveElosIn(tx *firestore.Transaction, elos []Elo) e
 
 // Update pulls current Elo from db and provides rating updates and deltas per results for users associated with uids.
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uids
-func (cl *GameClient[GT, G]) UpdateElo(ctx *gin.Context, uids []UID, places PlacesMap) ([]Elo, []Elo, error) {
+func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, uids []UID, places PlacesMap) ([]Elo, []Elo, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -231,16 +233,19 @@ func (cl *GameClient[GT, G]) UpdateElo(ctx *gin.Context, uids []UID, places Plac
 
 	Debugf("oldElos: %#v", oldElos)
 
-	newElos := make([]Elo, len(uids))
 	eloMap := make(eloMap, len(oldElos))
 	for i, elo := range oldElos {
-		elo2 := elo
-		eloMap[uids[i]] = elo2
-		newElos[i] = elo
+		eloMap[uids[i]] = elo
 	}
 
+	t := time.Now()
+	newElos := make([]Elo, len(uids))
 	for i, uid := range uids {
-		newElos[i].Rating = updateEloFor(uid, eloMap, places)
+		newElos[i] = Elo{
+			ID:        uid,
+			Rating:    updateEloFor(uid, eloMap, places),
+			UpdatedAt: t,
+		}
 		Debugf("newElos: %#v", newElos)
 		Debugf("eloMap: %#v", eloMap)
 	}

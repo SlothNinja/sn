@@ -57,14 +57,14 @@ func (p *Player) equal(op *Player) bool {
 	return p != nil && op != nil && p.ID == op.ID
 }
 
-type Ptr[T any] interface {
+type ptr[T any] interface {
 	*T
 }
 
 type Playerer[T any] interface {
-	Ptr[T]
-
 	PID() PID
+
+	ptr[T]
 	setPID(PID)
 	getPerformedAction() bool
 	getStats() *Stats
