@@ -2,6 +2,9 @@ package sn
 
 import (
 	"context"
+	"log"
+	"log/slog"
+
 	// "log"
 	"os"
 	"time"
@@ -250,20 +253,20 @@ const fbCreds = "FB_CREDS"
 
 func newMsgClient(ctx context.Context) *messaging.Client {
 	if IsProduction() {
-		Debugf("production")
+		slog.Debug("production")
 		app, err := firebase.NewApp(ctx, nil)
 		if err != nil {
-			Panicf("unable to create messaging client: %v", err)
+			slog.Debug("unable to create messaging client: %v", err)
 			return nil
 		}
 		cl, err := app.Messaging(ctx)
 		if err != nil {
-			Panicf("unable to create messaging client: %v", err)
+			slog.Debug("unable to create messaging client: %v", err)
 			return nil
 		}
 		return cl
 	}
-	Debugf("development")
+	slog.Debug("development")
 	app, err := firebase.NewApp(
 		ctx,
 		nil,
@@ -271,12 +274,12 @@ func newMsgClient(ctx context.Context) *messaging.Client {
 		option.WithCredentialsFile(os.Getenv(fbCreds)),
 	)
 	if err != nil {
-		Panicf("unable to create messaging client: %v", err)
+		log.Panicf("unable to create messaging client: %v", err)
 		return nil
 	}
 	cl, err := app.Messaging(ctx)
 	if err != nil {
-		Panicf("unable to create messaging client: %v", err)
+		log.Panicf("unable to create messaging client: %v", err)
 		return nil
 	}
 	return cl

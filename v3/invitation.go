@@ -3,6 +3,7 @@ package sn
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -33,8 +34,8 @@ func (cl *GameClient[GT, G]) hashDocRef(id string) *firestore.DocumentRef {
 
 func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
 
 		if _, err := cl.RequireAdmin(ctx); err != nil {
 			JErr(ctx, err)
@@ -61,8 +62,8 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 }
 
 func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	var inv invitation
 
@@ -81,8 +82,8 @@ func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error)
 }
 
 func (cl *GameClient[GT, G]) getHash(ctx context.Context, id string) ([]byte, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	snap, err := cl.hashDocRef(id).Get(ctx)
 	if err != nil {
@@ -121,8 +122,8 @@ func (cl *GameClient[GT, G]) deleteInvitationIn(ctx context.Context, tx *firesto
 
 func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
 
 		var inv invitation
 		inv.Title = randomdata.SillyName()
@@ -133,8 +134,8 @@ func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
 
 		cu, err := cl.getCU(ctx)
 		if err != nil {
@@ -168,7 +169,6 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 
 		inv2 := inv
 		inv2.Title = randomdata.SillyName()
-		cl.Log.Debugf("inv2: %#v", inv2)
 		ctx.JSON(http.StatusOK, gin.H{
 			"Invitation": inv2,
 			"Message":    fmt.Sprintf("%s created game %q", cu.Name, inv.Title),
@@ -177,8 +177,8 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 }
 
 func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	obj := struct {
 		Type       Type
@@ -219,8 +219,8 @@ func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
 
 func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -293,8 +293,8 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 // Returns (true, nil) if game should be started
 func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	err := inv.validateAcceptWith(u, pwd, hash)
 	if err != nil {
@@ -309,8 +309,8 @@ func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
 }
 
 func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	switch {
 	case len(inv.UserIDS) >= int(inv.NumPlayers):
@@ -320,7 +320,7 @@ func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
 	case len(hash) != 0:
 		err := bcrypt.CompareHashAndPassword(hash, pwd)
 		if err != nil {
-			Debugf(err.Error())
+			slog.Debug(err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
 				u.Name, inv.Title, ErrValidation)
 		}
@@ -341,8 +341,8 @@ func (h Header) startGameMessage(pid PID) string {
 
 func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		cl.Log.Debugf(msgEnter)
-		defer cl.Log.Debugf(msgExit)
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
 
 		inv, err := cl.getInvitation(ctx)
 		if err != nil {
@@ -378,8 +378,8 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 }
 
 func (inv *invitation) drop(u *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	if err := inv.validateDrop(u); err != nil {
 		return err
@@ -390,8 +390,8 @@ func (inv *invitation) drop(u *User) error {
 }
 
 func (inv *invitation) validateDrop(u *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	switch {
 	case inv.Status != Recruiting:

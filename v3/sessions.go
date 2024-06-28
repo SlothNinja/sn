@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	firebase "firebase.google.com/go/v4"
 	"github.com/gin-contrib/sessions"
@@ -31,8 +32,8 @@ type session struct {
 }
 
 func getFBToken(ctx *gin.Context, uid UID) (string, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgEnter)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgEnter)
 
 	app, err := firebase.NewApp(ctx, nil)
 	if err != nil {
@@ -52,8 +53,8 @@ func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 }
 
 func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	token, ok := cl.session(ctx).GetUserToken()
 	if !ok {
@@ -64,11 +65,10 @@ func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 }
 
 func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	token, ok := cl.session(ctx).GetUserToken()
-	cl.Log.Debugf("token: %#v", token)
 	if !ok {
 		return nil, ErrMissingToken
 	}
@@ -77,8 +77,8 @@ func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
 }
 
 func (cl *Client) getAdmin(ctx *gin.Context) (bool, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	token, ok := cl.session(ctx).GetUserToken()
 	if !ok {
@@ -95,8 +95,8 @@ type SessionToken struct {
 }
 
 func (s session) NewToken(uid UID, sub string, data userData) SessionToken {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	return SessionToken{ID: uid, Sub: sub, Data: data}
 }
@@ -164,8 +164,8 @@ func (cl *Client) session(ctx *gin.Context) session {
 
 // NewStore generates a new secure cookie store
 func (cl *Client) initSession(ctx context.Context) *Client {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	s, err := cl.getSessionSecrets(ctx)
 	if err != nil {

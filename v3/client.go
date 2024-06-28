@@ -4,7 +4,7 @@ package sn
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,7 +19,7 @@ import (
 )
 
 type Client struct {
-	Log    *Logger
+	// Log    *Logger
 	Cache  *cache.Cache
 	Router *gin.Engine
 	options
@@ -41,7 +41,6 @@ func defaultClient() *Client {
 	cl.frontEndPort = getFrontEndPort()
 	cl.secretsProjectID = getSecretsProjectID()
 	cl.secretsDSURL = getSecretsDSURL()
-	cl.loggerID = getLoggerID()
 	cl.corsAllow = getCORSAllow()
 	cl.prefix = getPrefix()
 	cl.home = getHome()
@@ -57,21 +56,11 @@ func NewClient(ctx context.Context, opts ...Option) *Client {
 	}
 
 	// Initalize
-	return cl.initLogger().
-		initCache().
+	return cl.initCache().
 		initRouter().
 		initSession(ctx).
 		initEnvironment().
 		addRoutes()
-}
-
-func (cl *Client) initLogger() *Client {
-	lClient, err := NewLogClient(cl.projectID)
-	if err != nil {
-		log.Panicf("unable to create logging client: %v", err)
-	}
-	cl.Log = lClient.Logger(cl.loggerID)
-	return cl
 }
 
 func (cl *Client) initCache() *Client {
@@ -85,8 +74,8 @@ func (cl *Client) initRouter() *Client {
 }
 
 func (cl *Client) initEnvironment() *Client {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	if IsProduction() {
 		cl.Router.TrustedPlatform = gin.PlatformGoogleAppEngine
@@ -115,8 +104,8 @@ func NewGameClient[GT any, G Gamer[GT]](ctx context.Context, opts ...Option) *Ga
 
 // AddRoutes addes routing for game.
 func (cl *Client) addRoutes() *Client {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	/////////////////////////////////////////////
 	// Current User
@@ -258,8 +247,8 @@ func (cl *GameClient[GT, G]) Close() error {
 }
 
 func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
 		return cl.txCommit(c, tx, g, u)
@@ -267,8 +256,8 @@ func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
 }
 
 func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	gc, err := cl.txGetCommitted(tx, g.getHeader().ID)
 	if err != nil {
@@ -288,8 +277,8 @@ func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transac
 }
 
 func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
 		return cl.txSave(c, tx, g, u)
@@ -297,8 +286,8 @@ func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
 }
 
 func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	g.getHeader().UpdatedAt = time.Now()
 
@@ -323,8 +312,8 @@ func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transacti
 }
 
 func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
 	for {

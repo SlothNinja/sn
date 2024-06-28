@@ -3,6 +3,7 @@ package sn
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -25,8 +26,8 @@ type sessionSecret struct {
 }
 
 func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	s, found := cl.mcGetSessionSecrets()
 	if found {
@@ -38,14 +39,14 @@ func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error)
 		return s, err
 	}
 
-	cl.Log.Debugf("generated new secrets")
+	slog.Debug("generated new secrets")
 	return cl.updateSessionSecrets(ctx)
 }
 
 // mcGet attempts to pull secret from cache
 func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	k := secretsKey().Encode()
 
@@ -64,8 +65,8 @@ func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
 
 // dsGet attempt to pull secret from datastore
 func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	secretsDS, err := cl.getSessionSecretsDatastore(ctx)
 	if err != nil {
@@ -78,8 +79,8 @@ func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, erro
 }
 
 func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	secretsDS, err := cl.getSessionSecretsDatastore(c)
 	if err != nil {
@@ -96,8 +97,8 @@ func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error
 }
 
 func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	if IsProduction() {
 		return cl.getProductionSessionSecretsDatastore(ctx)
@@ -106,15 +107,15 @@ func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Cl
 }
 
 func (cl *Client) getProductionSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	return datastore.NewClient(ctx, cl.secretsProjectID)
 }
 
 func (cl *Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*datastore.Client, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	return datastore.NewClient(
 		ctx,

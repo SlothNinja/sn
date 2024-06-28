@@ -15,7 +15,6 @@ type options struct {
 	backEndPort      string
 	secretsProjectID string
 	secretsDSURL     string
-	loggerID         string
 	corsAllow        []string
 	prefix           string
 	home             string
@@ -218,24 +217,6 @@ func getSecretsDSURL() string {
 
 func (cl *Client) GetSecretsDSURL() string {
 	return cl.secretsDSURL
-}
-
-func WithLoggerID(id string) Option {
-	return func(cl *Client) *Client {
-		cl.loggerID = id
-		return cl
-	}
-}
-
-func getLoggerID() string {
-	if id, found := os.LookupEnv("LOGGER_ID"); found {
-		return id
-	}
-	return getProjectID()
-}
-
-func (cl *Client) GetLoggerID() string {
-	return cl.loggerID
 }
 
 func WithCORSAllow(paths ...string) Option {

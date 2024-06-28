@@ -1,6 +1,7 @@
 package sn
 
 import (
+	"log/slog"
 	"os"
 
 	"cloud.google.com/go/datastore"
@@ -33,8 +34,8 @@ func VersionID() string {
 }
 
 func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	cu, err := cl.getCU(ctx)
 	if err != nil {
@@ -44,8 +45,8 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
 }
 
 func (cl *Client) RequireAdmin(ctx *gin.Context) (*User, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	admin, err := cl.getAdmin(ctx)
 	if !admin || err != nil {

@@ -2,6 +2,7 @@ package sn
 
 import (
 	"encoding/json"
+	"log/slog"
 	"time"
 )
 
@@ -30,14 +31,14 @@ func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
 func deepCopy[T any](obj T) T {
 	v, err := json.Marshal(obj)
 	if err != nil {
-		Errorf("unable to marshal object: %v", err)
+		slog.Error("unable to marshal object: %v", err)
 		panic("unable to marshal object")
 	}
 
 	var obj2 T
 	err = json.Unmarshal(v, &obj2)
 	if err != nil {
-		Errorf("unable to unmarshal game: %v", err)
+		slog.Error("unable to unmarshal game: %v", err)
 		panic("unable to unmarshal game")
 	}
 	return obj2
@@ -54,7 +55,7 @@ func (g *Game[S, T, P]) newEntry(template string, data H, updatedAt time.Time) {
 func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt time.Time) {
 	lastIndex := len(g.Log) - 1
 	if lastIndex < 0 {
-		Warningf("no log entry")
+		slog.Warn("no log entry")
 		return
 	}
 	g.Log[lastIndex].UpdatedAt = updatedAt
@@ -66,7 +67,7 @@ func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt time.Time) {
 func (g *Game[S, T, P]) NewSubEntry(template string, data H, updatedAt time.Time) {
 	lastEntryIndex := len(g.Log) - 1
 	if lastEntryIndex < 0 {
-		Warningf("no log entry")
+		slog.Warn("no log entry")
 		return
 	}
 	g.Log[lastEntryIndex].UpdatedAt = updatedAt
@@ -76,13 +77,13 @@ func (g *Game[S, T, P]) NewSubEntry(template string, data H, updatedAt time.Time
 func (g *Game[S, T, P]) UpdateLastSubEntry(template string, data H) {
 	lastEntryIndex := len(g.Log) - 1
 	if lastEntryIndex < 0 {
-		Warningf("no log entry")
+		slog.Warn("no log entry")
 		return
 	}
 
 	lastSubEntryIndex := len(g.Log[lastEntryIndex].SubEntries) - 1
 	if lastSubEntryIndex < 0 {
-		Warningf("no log subentry")
+		slog.Warn("no log subentry")
 		return
 	}
 	for k, v := range data {

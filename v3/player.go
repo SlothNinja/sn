@@ -1,7 +1,8 @@
 package sn
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/elliotchance/pie/v2"
 )
@@ -77,11 +78,11 @@ type Players[T any, P Playerer[T]] []P
 type Comparison int
 
 const (
-	EqualTo     Comparison = 0
-	LessThan    Comparison = -1
-	GreaterThan Comparison = 1
-	Ascending              = LessThan
-	Descending             = GreaterThan
+	EqualTo     int = 0
+	LessThan        = -1
+	GreaterThan     = 1
+	Ascending       = LessThan
+	Descending      = GreaterThan
 )
 
 type UIndex int
@@ -106,17 +107,6 @@ func (h Header) UIDFor(pid PID) UID {
 	return h.UserIDS[pid.ToUIndex()]
 }
 
-// func (h Header) NameByUID(uid UID) string {
-// 	return h.NameByIndex(h.indexFor(uid))
-// }
-
-// func (h Header) NameByIndex(i UIndex) string {
-// 	if i >= 0 && i < UIndex(len(h.UserNames)) {
-// 		return h.UserNames[i]
-// 	}
-// 	return ""
-// }
-
 func (h Header) IndexFor(uid UID) UIndex {
 	return UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
 }
@@ -137,49 +127,16 @@ func (h Header) GravTypeFor(pid PID) string {
 const NotFound = -1
 const UIndexNotFound UIndex = -1
 
-func sortedByScore[T any, P Playerer[T]](ps []P, c Comparison) {
-	sort.SliceStable(ps, func(i, j int) bool { return compareByScore(ps[i], ps[j]) == c })
+func (g *Game[S, T, P]) sortPlayers(compare func(PID, PID) int) {
+	slices.SortFunc(g.Players, func(p1, p2 P) int { return compare(p1.PID(), p2.PID()) })
 }
 
-func compareByScore[T any, P Playerer[T]](p1, p2 P) Comparison {
-	switch {
-	case p1.getScore() < p2.getStats().Score:
-		return LessThan
-	case p1.getScore() > p2.getStats().Score:
-		return GreaterThan
-	default:
-		return EqualTo
-	}
-}
-
-func (g *Game[S, T, P]) determinePlaces() (Results, error) {
-	rs := make(Results)
-	sortedByScore(g.Players, Descending)
-	ps := g.copyPlayers()
-
-	place := 1
-	for len(ps) != 0 {
-		// Find all players tied at place
-		found := pie.Filter(ps, func(p2 P) bool { return compareByScore(ps[0], p2) == EqualTo })
-		// Get user keys for found players
-		rs[place] = pie.Map(found, func(p P) UID { return g.Header.UIDFor(p.PID()) })
-		// Set ps to remaining players
-		_, ps = diff(ps, found, func(p1, p2 P) bool { return p1.PID() == p2.PID() })
-		// Above does not guaranty order so sort
-		sortedByScore(ps, Descending)
-		// Increase place by number of players added to current place
-		place += len(rs[place])
-	}
-	// 	for _, p1 := range g.players {
-	// 		rs[place] = append(rs[place], g.userKeyFor(p1.ID))
-	// 		for _, p2 := range g.players {
-	// 			if p1.ID != p2.ID && p1.compare(p2) != equalTo {
-	// 				place++
-	// 				break
-	// 			}
-	// 		}
-	// 	}
-	return rs, nil
+// Compare implements Comparer interface.
+// Essentially, provides a fallback/default compare which ranks players
+// in descending order of score. In other words, the more a player scores
+// the earlier they are in finish order.
+func (g *Game[S, T, P]) Compare(pid1, pid2 PID) int {
+	return cmp.Compare(g.PlayerByPID(pid2).getScore(), g.PlayerByPID(pid1).getScore())
 }
 
 func diff[T any](ss []T, against []T, equal func(T, T) bool) (added, removed []T) {

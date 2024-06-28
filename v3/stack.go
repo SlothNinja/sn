@@ -3,6 +3,7 @@ package sn
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
@@ -72,8 +73,8 @@ func (cl *GameClient[GT, G]) StackDocRef(gid string, uid UID) *firestore.Documen
 }
 
 func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (Stack, error) {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	snap, err := cl.StackDocRef(gid, uid).Get(ctx)
 	if err != nil {
@@ -90,8 +91,8 @@ func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) 
 }
 
 func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, s Stack) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	_, err := cl.StackDocRef(gid, uid).Set(ctx, &s)
 	if err != nil {
@@ -101,8 +102,8 @@ func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, 
 }
 
 func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UID) error {
-	cl.Log.Debugf(msgEnter)
-	defer cl.Log.Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	_, err := cl.StackDocRef(gid, uid).Delete(ctx)
 	return err

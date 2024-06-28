@@ -2,6 +2,7 @@ package sn
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -151,8 +152,8 @@ func (g *Game[S, T, P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
 }
 
 func (cl *GameClient[GT, G]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
-	Debugf(msgEnter)
-	Debugf(msgExit)
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
 
 	l := len(uids)
 	ustats := make([]UStat, l)
