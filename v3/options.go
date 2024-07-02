@@ -2,7 +2,6 @@ package sn
 
 import (
 	"os"
-	"strings"
 )
 
 type options struct {
@@ -15,7 +14,6 @@ type options struct {
 	backEndPort      string
 	secretsProjectID string
 	secretsDSURL     string
-	corsAllow        []string
 	prefix           string
 	home             string
 }
@@ -212,30 +210,11 @@ func getSecretsDSURL() string {
 	if IsProduction() {
 		return "user.slothninja.com"
 	}
-	return "user.fake-slothninja.com:8086"
+	return "localhost:8086"
 }
 
 func (cl *Client) GetSecretsDSURL() string {
 	return cl.secretsDSURL
-}
-
-func WithCORSAllow(paths ...string) Option {
-	return func(cl *Client) *Client {
-		cl.corsAllow = paths
-		return cl
-	}
-}
-
-func getCORSAllow() []string {
-	cors, found := os.LookupEnv("CORS_ALLOW")
-	if !found {
-		return nil
-	}
-	return strings.Split(cors, ",")
-}
-
-func (cl *Client) GetCORSAllow() []string {
-	return cl.corsAllow
 }
 
 func WithPrefix(prefix string) Option {

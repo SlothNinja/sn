@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	gob.RegisterName("SessionToken", SessionToken{})
+	gob.RegisterName("SessionToken", new(SessionToken))
 }
 
 // ErrMissingToken signals that expected session token is missing
@@ -23,13 +23,15 @@ var ErrMissingToken = fmt.Errorf("missing token")
 const (
 	emailKey    = "email"
 	nameKey     = "name"
+	stateKey    = "state"
+	redirectKey = "redirect"
 	sessionName = "sng-oauth"
 	sessionKey  = "session"
 )
 
-type session struct {
-	sessions.Session
-}
+// type session struct {
+// 	sessions.Session
+// }
 
 func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 	slog.Debug(msgEnter)
@@ -52,13 +54,15 @@ func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 	return token, err
 }
 
+const notFound = false
+
 func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	token, ok := cl.session(ctx).GetUserToken()
-	if !ok {
-		return 0, ErrMissingToken
+	token := cl.GetSessionToken(ctx)
+	if token == nil {
+		return 0, ErrNotLoggedIn
 	}
 
 	return token.ID, nil
@@ -68,25 +72,33 @@ func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	token, ok := cl.session(ctx).GetUserToken()
-	if !ok {
-		return nil, ErrMissingToken
+	token := cl.GetSessionToken(ctx)
+	if token == nil {
+		return nil, ErrNotLoggedIn
 	}
 
-	return &User{ID: token.ID, userData: token.Data}, nil
+	return token.toUser(), nil
 }
 
-func (cl *Client) getAdmin(ctx *gin.Context) (bool, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
-
-	token, ok := cl.session(ctx).GetUserToken()
-	if !ok {
-		return false, ErrMissingToken
-	}
-
-	return token.Data.Admin, nil
+func (s *SessionToken) toUser() *User {
+	return &User{ID: s.ID, userData: s.Data}
 }
+
+func TokenFrom(u *User, sub string) *SessionToken {
+	return &SessionToken{ID: u.ID, Sub: sub, Data: u.userData}
+}
+
+// func (cl *Client) isAdminSession(ctx *gin.Context) bool {
+// 	slog.Debug(msgEnter)
+// 	defer slog.Debug(msgExit)
+//
+// 	token, found := cl.GetSessionToken(ctx)
+// 	if !found {
+// 		return false
+// 	}
+//
+// 	return token.Data.Admin
+// }
 
 type SessionToken struct {
 	ID   UID
@@ -94,72 +106,108 @@ type SessionToken struct {
 	Data userData
 }
 
-func (s session) NewToken(uid UID, sub string, data userData) SessionToken {
+func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	return SessionToken{ID: uid, Sub: sub, Data: data}
+	if u == nil {
+		return
+	}
+
+	cl.session(ctx).Set(sessionKey, TokenFrom(u, sub))
 }
 
-func (s session) SaveToken(st SessionToken) error {
-	s.Set(sessionKey, st)
-	return s.Save()
-}
-
-func (s session) GetUserToken() (SessionToken, bool) {
-	token, ok := s.Get(sessionKey).(SessionToken)
-	return token, ok
-}
-
-func (s session) GetNewUser() (*User, error) {
-	token, ok := s.GetUserToken()
+func (cl *Client) GetSessionToken(ctx *gin.Context) *SessionToken {
+	token, ok := cl.session(ctx).Get(sessionKey).(*SessionToken)
 	if !ok {
-		return &User{}, errors.New("token not found")
+		return nil
+	}
+	return token
+}
+
+func (cl *Client) SaveSession(ctx *gin.Context) error {
+	return cl.session(ctx).Save()
+}
+
+func (cl *Client) ClearSession(ctx *gin.Context) {
+	cl.session(ctx).Clear()
+}
+
+func (cl *Client) GetNewUser(ctx *gin.Context) (*User, error) {
+	token := cl.GetSessionToken(ctx)
+	if token == nil {
+		return nil, ErrNotLoggedIn
 	}
 
 	if token.ID != 0 {
-		return &User{}, errors.New("user present, no need for new one.")
+		return nil, errors.New("user present, no need for new one.")
 	}
 
-	var err error
-	u := &User{ID: token.ID}
-	u.Name, err = s.getNewUserName()
-	if err != nil {
-		return nil, err
+	u := token.toUser()
+	u.Name = cl.getSessionUserName(ctx)
+	if u.Name == "" {
+		return nil, errors.New("session missing user name.")
 	}
-	u.Email, err = s.getNewUserEmail()
-	if err != nil {
-		return nil, err
+
+	u.Email = cl.getSessionUserEmail(ctx)
+	if u.Email == "" {
+		return nil, errors.New("session missing user email.")
 	}
+
 	return u, nil
 }
 
-func (s session) SetUserEmail(email string) {
-	s.Set(emailKey, email)
+func (cl *Client) SetSessionUserEmail(ctx *gin.Context, email string) {
+	cl.session(ctx).Set(emailKey, email)
 }
 
-func (s session) getNewUserEmail() (string, error) {
-	email, ok := s.Get(emailKey).(string)
+func (cl *Client) getSessionUserEmail(ctx *gin.Context) string {
+	email, ok := cl.session(ctx).Get(emailKey).(string)
 	if !ok {
-		return "", errors.New("email not found")
+		return ""
 	}
-	return email, nil
+	return email
 }
 
-func (s session) SetUserName(name string) {
-	s.Set(nameKey, name)
+func (cl *Client) SetSessionUserName(ctx *gin.Context, name string) {
+	cl.session(ctx).Set(nameKey, name)
 }
 
-func (s session) getNewUserName() (string, error) {
-	name, ok := s.Get(nameKey).(string)
+func (cl *Client) SetSessionState(ctx *gin.Context, state string) {
+	cl.session(ctx).Set(stateKey, state)
+}
+
+func (cl *Client) GetSessionState(ctx *gin.Context) string {
+	state, ok := cl.session(ctx).Get(stateKey).(string)
+	slog.Debug(fmt.Sprintf("state: %v, statekey: %v, ok: %v", state, stateKey, ok))
 	if !ok {
-		return "", errors.New("name not found")
+		return ""
 	}
-	return name, nil
+	return state
 }
 
-func (cl *Client) session(ctx *gin.Context) session {
-	return session{sessions.Default(ctx)}
+func (cl *Client) SetSessionRedirect(ctx *gin.Context, redirect string) {
+	cl.session(ctx).Set(redirectKey, redirect)
+}
+
+func (cl *Client) GetSessionRedirect(ctx *gin.Context) string {
+	redirect, ok := cl.session(ctx).Get(redirectKey).(string)
+	if !ok {
+		return ""
+	}
+	return redirect
+}
+
+func (cl *Client) getSessionUserName(ctx *gin.Context) string {
+	name, ok := cl.session(ctx).Get(nameKey).(string)
+	if !ok {
+		return ""
+	}
+	return name
+}
+
+func (cl *Client) session(ctx *gin.Context) sessions.Session {
+	return sessions.Default(ctx)
 }
 
 // NewStore generates a new secure cookie store
@@ -173,19 +221,19 @@ func (cl *Client) initSession(ctx context.Context) *Client {
 	}
 
 	store := cookie.NewStore(s.HashKey, s.BlockKey)
-	opts := sessions.Options{
-		Domain: "fake-slothninja.com",
-		Path:   "/",
-	}
+	// opts := sessions.Options{
+	// 	Domain: "fake-slothninja.com",
+	// 	Path:   "/",
+	// }
 	if IsProduction() {
-		opts = sessions.Options{
+		opts := sessions.Options{
 			Domain: "slothninja.com",
 			Path:   "/",
 			MaxAge: 60 * 60 * 24 * 30, // 1 Month in seconds
 			Secure: true,
 		}
+		store.Options(opts)
 	}
-	store.Options(opts)
 	cl.Router.Use(sessions.Sessions(sessionName, store))
 	return cl
 }

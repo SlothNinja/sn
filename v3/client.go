@@ -12,14 +12,12 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/elliotchance/pie/v2"
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/iterator"
 )
 
 type Client struct {
-	// Log    *Logger
 	Cache  *cache.Cache
 	Router *gin.Engine
 	options
@@ -41,7 +39,6 @@ func defaultClient() *Client {
 	cl.frontEndPort = getFrontEndPort()
 	cl.secretsProjectID = getSecretsProjectID()
 	cl.secretsDSURL = getSecretsDSURL()
-	cl.corsAllow = getCORSAllow()
 	cl.prefix = getPrefix()
 	cl.home = getHome()
 	return cl
@@ -83,11 +80,6 @@ func (cl *Client) initEnvironment() *Client {
 	}
 
 	// Is development
-	config := cors.DefaultConfig()
-	config.AllowOrigins = cl.corsAllow
-	config.AllowCredentials = true
-	config.AllowWildcard = true
-	cl.Router.Use(cors.New(config))
 	cl.Router.SetTrustedProxies(nil)
 	return cl
 }

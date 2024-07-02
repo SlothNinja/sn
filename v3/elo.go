@@ -117,8 +117,6 @@ func merrFilter(err error, ignore ...error) error {
 type eloMap map[UID]Elo
 type PlacesMap map[UID]int
 
-const notFound = 0
-
 func updateEloFor(uid1 UID, elos eloMap, places PlacesMap) int {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)

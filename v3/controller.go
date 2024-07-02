@@ -39,7 +39,7 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
 
 	cu, err := cl.getCU(ctx)
 	if err != nil {
-		return nil, ErrNotLoggedIn
+		return nil, err
 	}
 	return cu, nil
 }
@@ -48,12 +48,15 @@ func (cl *Client) RequireAdmin(ctx *gin.Context) (*User, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	admin, err := cl.getAdmin(ctx)
-	if !admin || err != nil {
-		return nil, ErrNotAdmin
+	token := cl.GetSessionToken(ctx)
+	if token == nil {
+		return nil, ErrNotLoggedIn
 	}
 
-	return cl.RequireLogin(ctx)
+	if !token.Data.Admin {
+		return nil, ErrNotAdmin
+	}
+	return token.toUser(), nil
 }
 
 const (
