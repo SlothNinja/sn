@@ -6,177 +6,120 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-// Player stats for a single game
-type Stats struct {
-	// Number of points scored by player
-	Score int64
-	// Number of games played at player count
-	GamesPlayed int64
-	// Number of games won at player count
-	Won int64
-	// Number of moves made by player
-	Moves int64
-	// Amount of time passed between player moves by player
-	Think time.Duration
-	// Position player finished (e.g., 1st, 2nd, etc.)
-	Finish int
-}
-
-const ustatsKind = "UStats"
-
-type UStat struct {
-	// Below slices
-	// Index 0: Total at all player counts
-	// Index 1: Reserved
-	// Index 2: Total 2P games
-	// Index 3: Total 3P games
-	// Index 4: Total 4P games
-	// Index 5: Total 5P games
-	// Index 6: Total 6P games
-
+type ustat struct {
+	// UID of user
 	ID UID
+
 	// Number of games played
-	Played []int64
+	Played int64
 
 	// Number of games won
-	Won []int64
+	Won int64
+
 	// Number of points scored
-	Scored []int64
+	Scored int64
+
 	// Number of moves made by player
-	Moves []int64
+	Moves int64
+
 	// Amount of time passed between player moves by player
-	Think []time.Duration
+	Think time.Duration
+
 	// Average amount of time passed between player moves by player
-	ThinkAvg []time.Duration
+	ThinkAvg time.Duration
+
 	// Sum of position finishes
-	Finish []int64
+	Finish int64
+
 	// Average finishing position
-	FinishAvg []float32
+	FinishAvg float32
+
 	// Average Score
-	ScoreAvg []float32
+	ScoreAvg float32
+
 	// Win percentage
-	WinPercentage []float32
+	WinPercentage float32
+
 	// Win percentage
-	ExpectedWinPercentage []float32
+	ExpectedWinPercentage float32
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func newUStat(uid UID, maxPlayers int) UStat {
-	return UStat{
-		// Key:                   newUStatsKey(uid),
-		ID:                    uid,
-		Played:                make([]int64, maxPlayers+1),
-		Won:                   make([]int64, maxPlayers+1),
-		Scored:                make([]int64, maxPlayers+1),
-		Moves:                 make([]int64, maxPlayers+1),
-		Think:                 make([]time.Duration, maxPlayers+1),
-		ThinkAvg:              make([]time.Duration, maxPlayers+1),
-		Finish:                make([]int64, maxPlayers+1),
-		FinishAvg:             make([]float32, maxPlayers+1),
-		ScoreAvg:              make([]float32, maxPlayers+1),
-		WinPercentage:         make([]float32, maxPlayers+1),
-		ExpectedWinPercentage: make([]float32, maxPlayers+1),
-	}
+func newUStat(uid UID) ustat {
+	return ustat{ID: uid}
 }
 
 func (cl *GameClient[GT, G]) ustatDocRef(uid UID) *firestore.DocumentRef {
-	return cl.FS.Collection(ustatsKind).Doc(fmt.Sprintf("%d", uid))
+	return cl.FS.Collection("UStats").Doc(fmt.Sprintf("%d", uid))
 }
 
-func (g *Game[S, T, P]) updateUStats(stats []UStat, pstats []*Stats, uids []UID) []UStat {
-	var ustats = make([]UStat, len(stats))
+func (g *Game[S, T, P]) updateUStats(stats []ustat, pstats []*Stats, uids []UID) []ustat {
+	var ustats = make([]ustat, len(stats))
 	for i := range stats {
 		ustats[i] = g.updateUStat(stats[i], pstats[i], uids[i])
 	}
 	return ustats
 }
 
-func (g *Game[S, T, P]) updateUStat(stat UStat, pstats *Stats, uid UID) UStat {
-	stat.Played[0]++
-	stat.Played[g.Header.NumPlayers]++
+func (g *Game[S, T, P]) updateUStat(stat ustat, pstats *Stats, uid UID) ustat {
+	stat.Played++
 	for _, id := range g.Header.WinnerIDS {
 		if id == uid {
-			stat.Won[0]++
-			stat.Won[g.Header.NumPlayers]++
+			stat.Won++
 			break
 		}
 	}
 
-	stat.Moves[0] += pstats.Moves
-	stat.Moves[g.Header.NumPlayers] += pstats.Moves
-
-	stat.Think[0] += pstats.Think
-	stat.Think[g.Header.NumPlayers] += pstats.Think
-
-	stat.Scored[0] += int64(pstats.Score)
-	stat.Scored[g.Header.NumPlayers] += int64(pstats.Score)
-
-	stat.Finish[0] += int64(pstats.Finish)
-	stat.Finish[g.Header.NumPlayers] += int64(pstats.Finish)
-
-	if stat.Played[0] != 0 {
-		stat.WinPercentage[0] = float32(stat.Won[0]) / float32(stat.Played[0])
-		stat.ExpectedWinPercentage[0] = (float32(stat.Played[3])/3.0 + float32(stat.Played[4])/4.0 +
-			float32(stat.Played[5])/5.0) / float32(stat.Played[0])
-		stat.FinishAvg[0] = float32(stat.Finish[0]) / float32(stat.Played[0])
-		stat.ScoreAvg[0] = float32(stat.Scored[0]) / float32(stat.Played[0])
+	stat.Moves += pstats.Moves
+	stat.Think += pstats.Think
+	stat.Scored += int64(pstats.Score)
+	stat.Finish += int64(pstats.Finish)
+	if stat.Played != 0 {
+		stat.WinPercentage = float32(stat.Won) / float32(stat.Played)
+		stat.FinishAvg = float32(stat.Finish) / float32(stat.Played)
+		stat.ScoreAvg = float32(stat.Scored) / float32(stat.Played)
 	}
 
-	if stat.Moves[0] != 0 {
-		stat.ThinkAvg[0] = stat.Think[0] / time.Duration(stat.Moves[0])
+	if stat.Moves != 0 {
+		stat.ThinkAvg = stat.Think / time.Duration(stat.Moves)
 	}
 
-	numPlayers := g.Header.NumPlayers
-	if stat.Played[numPlayers] > 0 {
-		stat.WinPercentage[numPlayers] = float32(stat.Won[numPlayers]) / float32(stat.Played[numPlayers])
-		stat.FinishAvg[numPlayers] = float32(stat.Finish[numPlayers]) / float32(stat.Played[numPlayers])
-		stat.ScoreAvg[numPlayers] = float32(stat.Scored[numPlayers]) / float32(stat.Played[numPlayers])
-	}
-
-	if numPlayers != 0 {
-		stat.ExpectedWinPercentage[numPlayers] = 1.0 / float32(numPlayers)
-	}
-
-	if stat.Moves[numPlayers] != 0 {
-		stat.ThinkAvg[numPlayers] = stat.Think[numPlayers] / time.Duration(stat.Moves[numPlayers])
-	}
 	return stat
-
 }
 
-func (cl *GameClient[GT, G]) GetUStats(ctx *gin.Context, maxPlayers int, uids ...UID) ([]UStat, error) {
+func (cl *GameClient[GT, G]) getUStats(ctx *gin.Context, uids ...UID) ([]ustat, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	l := len(uids)
-	ustats := make([]UStat, l)
-	for i, uid := range uids {
-		snap, err := cl.ustatDocRef(uid).Get(ctx)
-		if status.Code(err) == codes.NotFound {
-			ustats[i] = newUStat(uid, maxPlayers)
-			ustats[i].CreatedAt = time.Now()
+	refs := pie.Map(uids, func(uid UID) *firestore.DocumentRef { return cl.ustatDocRef(uid) })
+	snaps, err := cl.FS.GetAll(ctx, refs)
+	if err != nil {
+		return nil, err
+	}
+
+	ustats := make([]ustat, len(snaps))
+	for i, snap := range snaps {
+		if !snap.Exists() {
+			ustats[i] = newUStat(uids[i])
 			continue
 		}
 
-		var stat UStat
-		err = snap.DataTo(&stat)
-		if err != nil {
+		var ustat ustat
+		if err := snap.DataTo(&ustat); err != nil {
 			return nil, err
 		}
-		ustats[i] = stat
+		ustats[i] = ustat
 	}
-
 	return ustats, nil
 }
 
-func (cl *GameClient[GT, G]) SaveUStatsIn(tx *firestore.Transaction, ustats []UStat) error {
+func (cl *GameClient[GT, G]) txSaveUStats(tx *firestore.Transaction, ustats []ustat) error {
 	t := time.Now()
 	for _, ustat := range ustats {
 		ustat.UpdatedAt = t

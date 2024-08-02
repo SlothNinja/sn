@@ -132,7 +132,7 @@ func (cl *Client) GetPort() string {
 	return cl.port
 }
 
-// WithFrontEndPort sets the port for the from end of the service.
+// WithFrontEndPort sets the port for the front end of the service.
 // If not set via WithFrontEndPort, the FE_PORT environment variable, or the PORT environment variable,
 // then the front end port fallsback to the WithPort value
 func WithFrontEndPort(port string) Option {
@@ -196,6 +196,7 @@ func (cl *Client) GetSecretsProjectID() string {
 	return cl.secretsProjectID
 }
 
+// WithSecretsDSURL used to set the url for the secrets datastore
 func WithSecretsDSURL(url string) Option {
 	return func(cl *Client) *Client {
 		cl.secretsDSURL = url
@@ -213,10 +214,12 @@ func getSecretsDSURL() string {
 	return "localhost:8086"
 }
 
+// GetSecretsDSURL returns the url for the secrets datastore
 func (cl *Client) GetSecretsDSURL() string {
 	return cl.secretsDSURL
 }
 
+// WithPrefix used to set a url prefix for backend actions
 func WithPrefix(prefix string) Option {
 	return func(cl *Client) *Client {
 		cl.prefix = prefix
@@ -231,10 +234,12 @@ func getPrefix() string {
 	return "/sn"
 }
 
+// GetPrefix used to get the url prefix for backend actions
 func (cl *Client) GetPrefix() string {
 	return cl.prefix
 }
 
+// WithHome used to set the url path to the home page
 func WithHome(path string) Option {
 	return func(cl *Client) *Client {
 		cl.home = path
@@ -249,8 +254,10 @@ func getHome() string {
 	return "/"
 }
 
+// GetHome used to get the url path to the home page
 func (cl *Client) GetHome() string {
 	return cl.home
 }
 
+// Option type for functions used to set client options
 type Option func(*Client) *Client

@@ -6,15 +6,16 @@ import (
 	"log/slog"
 
 	"cloud.google.com/go/firestore"
-	"github.com/gin-gonic/gin"
 )
 
+// Stack provides an undo stack for a game
 type Stack struct {
 	Current   int
 	Updated   int
 	Committed int
 }
 
+// Undo updates stack to undo an action
 func (s *Stack) Undo() bool {
 	undo := s.Current > s.Committed
 	if undo {
@@ -23,11 +24,13 @@ func (s *Stack) Undo() bool {
 	return undo
 }
 
+// Update updates the stack for an action
 func (s *Stack) Update() {
 	s.Current++
 	s.Updated = s.Current
 }
 
+// Reset resets the stack to the last committed action
 func (s *Stack) Reset() bool {
 	reset := s.Current != s.Committed || s.Updated != s.Current
 	if reset {
@@ -45,38 +48,25 @@ func (s *Stack) Redo() bool {
 	return redo
 }
 
+// Commit commits an action to the stack
 func (s *Stack) Commit() {
 	s.Committed++
 	s.Current, s.Updated = s.Committed, s.Committed
 }
 
-const stackKind = "Stack"
-
-// func stackKey(id int64, uid sn.UID) *datastore.Key {
-// 	return datastore.NameKey(stackKind, "stack", cachedRootKey(id, uid))
-// }
-
-// func stackDocRef(cl *firestore.Client, id string, uid sn.UID) *firestore.DocumentRef {
-// 	return cl.Collection(stackKind).Doc(fmt.Sprintf("%s-%d", id, uid))
-// }
-
-func getID(ctx *gin.Context) string {
-	return ctx.Param("id")
+func (cl *GameClient[GT, G]) stackCollectionRef() *firestore.CollectionRef {
+	return cl.FS.Collection("Stack")
 }
 
-func (cl *GameClient[GT, G]) StackCollectionRef() *firestore.CollectionRef {
-	return cl.FS.Collection(stackKind)
-}
-
-func (cl *GameClient[GT, G]) StackDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.StackCollectionRef().Doc(gid).Collection("For").Doc(fmt.Sprintf("%d", uid))
+func (cl *GameClient[GT, G]) stackDocRef(gid string, uid UID) *firestore.DocumentRef {
+	return cl.stackCollectionRef().Doc(gid).Collection("For").Doc(fmt.Sprintf("%d", uid))
 }
 
 func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (Stack, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	snap, err := cl.StackDocRef(gid, uid).Get(ctx)
+	snap, err := cl.stackDocRef(gid, uid).Get(ctx)
 	if err != nil {
 		return Stack{}, err
 	}
@@ -94,7 +84,7 @@ func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, 
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	_, err := cl.StackDocRef(gid, uid).Set(ctx, &s)
+	_, err := cl.stackDocRef(gid, uid).Set(ctx, &s)
 	if err != nil {
 		return err
 	}
@@ -102,9 +92,15 @@ func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, 
 }
 
 func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UID) error {
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txDeleteStack(tx, gid, uid)
+	})
+}
+
+func (cl *GameClient[GT, G]) txDeleteStack(tx *firestore.Transaction, gid string, uid UID) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	_, err := cl.StackDocRef(gid, uid).Delete(ctx)
-	return err
+	ref := cl.stackDocRef(gid, uid)
+	return tx.Delete(ref)
 }

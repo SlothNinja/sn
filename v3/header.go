@@ -4,6 +4,7 @@ import (
 	"time"
 )
 
+// Phase represents a game phase
 type Phase string
 
 // Header provides fields common to all games.

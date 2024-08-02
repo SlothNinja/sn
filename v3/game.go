@@ -19,26 +19,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	gameKind       = "Game"
-	revKind        = "Rev"
-	cacheKind      = "CacheFor"
-	fullCachedKind = "FullCacheFor"
-	viewKind       = "ViewFor"
-	committedKind  = "Committed"
-	indexKind      = "Index"
-	readKind       = "Read"
-	mlogKind       = "MLog"
-	messagesKind   = "Messages"
-)
-
-type Game[S, PT any, P Playerer[PT]] struct {
+// Game implements a game
+type Game[S, PT any, P playerer[PT]] struct {
 	Header  Header
 	Players Players[PT, P]
 	Log     glog
 	State   S
 }
 
+// Gamer interface implemented by Game
 type Gamer[G any] interface {
 	Viewer[G]
 	Comparer
@@ -50,15 +39,20 @@ type Gamer[G any] interface {
 	playerUIDS() []UID
 	ptr[G]
 	reset(...PID)
-	getResults([]Elo, []Elo) results
-	sendEndGameNotifications(*gin.Context, results) error
+	getResults([]elo, []elo) results
+	sendEndGameNotifications(results) error
 	setCurrentPlayerers
-	setFinishOrder(compareFunc) PlacesMap
+	setFinishOrder(compareFunc) placesMap
 	starter
 	statsFor(PID) *Stats
-	updateUStats([]UStat, []*Stats, []UID) []UStat
+	updateUStats([]ustat, []*Stats, []UID) []ustat
+	updateStatsFor(PID)
+	uidsForPidser
 }
 
+// Viewer interface provides methods used to return game states suitable for viewing by a given user.
+// In short, viewer should remove private game data that should not be exposed to a particular user.
+// For example, removing data for cards in hands of other players.type
 type Viewer[T any] interface {
 	Views() ([]UID, []*T)
 	ViewFor(UID) *T
@@ -66,6 +60,8 @@ type Viewer[T any] interface {
 
 type compareFunc func(PID, PID) int
 
+// Comparer provides interface for comparing players associated with the player ids
+// Returns 1 if player of first pid greater, 0 if equal, and -1 if if player of first pid is less than
 type Comparer interface {
 	Compare(PID, PID) int
 }
@@ -75,14 +71,12 @@ type starter interface {
 }
 
 type setCurrentPlayerers interface {
-	SetCurrentPlayers(...PID)
+	SetCurrentPlayers(...PID) []PID
 }
 
-const (
-	gameKey = "Game"
-	jsonKey = "JSON"
-	hParam  = "hid"
-)
+func getID(ctx *gin.Context) string {
+	return ctx.Param("id")
+}
 
 func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -101,10 +95,7 @@ func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
 			return
 		}
 
-		err = cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-			return cl.clearCached(c, h.ID, h.Undo.Committed, cu.ID)
-		})
-		if err != nil {
+		if err := cl.clearCached(ctx, h.ID, h.Undo.Committed, cu.ID); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -383,10 +374,6 @@ func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID, crev 
 	return g, nil
 }
 
-const (
-	cachedRootKind = "CachedRoot"
-)
-
 func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -474,7 +461,7 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Undo.Committed, u.ID, g.getHeader().Undo.Current), g); err != nil {
 			return err
 		}
@@ -483,12 +470,19 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 			return err
 		}
 
-		return tx.Set(cl.StackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
+		return tx.Set(cl.stackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
 	})
 }
 
-type CachedActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (string, error)
+// CachedResult provides a return value associated with performing a cached game action
+type CachedResult struct {
+	Message string
+}
 
+// CachedActionFunc provides a func type for cached game actions executed by CachedHandler
+type CachedActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (CachedResult, error)
+
+// CachedHandler provides a general purpose handler for performing cached game actions
 func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.Debug(msgEnter)
@@ -505,7 +499,7 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 			return
 		}
 
-		msg, err := action(g, ctx, cu)
+		result, err := action(g, ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -517,9 +511,9 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 			return
 		}
 
-		if len(msg) > 0 {
+		if len(result.Message) > 0 {
 			ctx.JSON(http.StatusOK, gin.H{
-				"Message": msg,
+				"Message": result.Message,
 				"Game":    g.ViewFor(cu.ID),
 			})
 			return
@@ -528,8 +522,18 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 	}
 }
 
-type FinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (PID, []PID, string, error)
+// FinishResult provides a return value associated with performing a finish turn action
+type FinishResult struct {
+	CurrentPlayerID PID
+	NextPlayerIDS   []PID
+	Message         string
+	Token           SubToken
+}
 
+// FinishTurnActionFunc provides a func type for finish turn action executed by FinishTurnHandler
+type FinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (FinishResult, error)
+
+// FinishTurnHandler provides a general purpose handler for performing finish turn actions
 func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.Debug(msgEnter)
@@ -547,22 +551,20 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		cpid, npids, msg, err := action(g, ctx, cu)
+		result, err := action(g, ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		cpStats := g.statsFor(cpid)
-		cpStats.Moves++
-		cpStats.Think += time.Since(g.getHeader().UpdatedAt)
+		g.updateStatsFor(result.CurrentPlayerID)
 
-		if len(npids) == 0 {
+		if len(result.NextPlayerIDS) == 0 {
 			cl.endGame(ctx, g, cu)
 			return
 		}
-		g.reset(npids...)
-		g.SetCurrentPlayers(npids...)
+		g.reset(result.NextPlayerIDS...)
+		notify := g.SetCurrentPlayers(result.NextPlayerIDS...)
 
 		err = cl.commit(ctx, g, cu)
 		if err != nil {
@@ -570,9 +572,19 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		if len(msg) > 0 {
+		if err := cl.updateSubs(ctx, g.getHeader().ID, result.Token, cu.ID); err != nil {
+			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", result.Token, err))
+		}
+
+		response, err := cl.sendNotifications(ctx, g, notify)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("attempted to send notifications to: %v: %v", result.NextPlayerIDS, err))
+		}
+		slog.Warn(fmt.Sprintf("batch send response: %v", response))
+
+		if len(result.Message) > 0 {
 			ctx.JSON(http.StatusOK, gin.H{
-				"Message": msg,
+				"Message": result.Message,
 				"Game":    g.ViewFor(cu.ID),
 			})
 			return
@@ -581,14 +593,22 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 	}
 }
 
+func (g *Game[S, T, P]) updateStatsFor(pid PID) {
+	stats := g.statsFor(pid)
+	stats.Moves++
+	stats.Think += time.Since(g.getHeader().UpdatedAt)
+}
+
 func (g *Game[S, T, P]) playerUIDS() []UID {
 	return pie.Map(g.Players, func(p P) UID { return g.Header.UserIDS[p.PID().ToUIndex()] })
 }
 
+// UIDForPID returns the player id associated with the user id
 func (g *Game[S, T, P]) UIDForPID(pid PID) UID {
 	return g.Header.UserIDS[pid.ToUIndex()]
 }
 
+// PlayerByPID returns the player associated with the player id
 func (g *Game[S, T, P]) PlayerByPID(pid PID) P {
 	const notFound = -1
 	index := pie.FindFirstUsing(g.Players, func(p P) bool { return p.PID() == pid })
@@ -599,6 +619,7 @@ func (g *Game[S, T, P]) PlayerByPID(pid PID) P {
 	return g.Players[index]
 }
 
+// PlayerByUID returns the player associated with the user id
 func (g *Game[S, T, P]) PlayerByUID(uid UID) P {
 	index := UIndex(pie.FindFirstUsing(g.Header.UserIDS, func(id UID) bool { return id == uid }))
 	return g.PlayerByPID(index.ToPID())
@@ -610,7 +631,8 @@ func (g *Game[S, T, P]) IndexForPlayer(p1 P) int {
 	return pie.FindFirstUsing(g.Players, func(p2 P) bool { return p1.PID() == p2.PID() })
 }
 
-// treats Players as a circular buffer, thus permitting indices larger than length and indices less than 0
+// PlayerByIndex returns player at associated index in Players slice
+// PlayerByIndex treats Players slice as a circular buffer, thus permitting indices larger than length and indices less than 0
 func (g *Game[S, T, P]) PlayerByIndex(i int) P {
 	l := len(g.Players)
 	if l < 1 {
@@ -625,10 +647,13 @@ func (g *Game[S, T, P]) PlayerByIndex(i int) P {
 	return g.Players[r]
 }
 
+// PIDS returns the player identiers for the players slice
 func (ps Players[T, P]) PIDS() []PID {
 	return pie.Map(ps, func(p P) PID { return p.PID() })
 }
 
+// IndexFor returns the index for the given player in Players slice
+// Also, return true if player found, and false if player not found in Players slice
 func (ps Players[T, P]) IndexFor(p1 P) (int, bool) {
 	const notFound = -1
 	const found = true
@@ -639,10 +664,13 @@ func (ps Players[T, P]) IndexFor(p1 P) (int, bool) {
 	return index, found
 }
 
+// Randomize randomizes the order of the players in the Players slice
 func (ps Players[T, P]) Randomize() {
 	rand.Shuffle(len(ps), func(i, j int) { ps[i], ps[j] = ps[j], ps[i] })
 }
 
+// RandomizePlayers randomizes the order of the players in the Players slice, and
+// updates the order of such players in the Header for the game.
 func (g *Game[S, T, P]) RandomizePlayers() {
 	g.Players.Randomize()
 	g.updateOrder()
@@ -653,44 +681,46 @@ func (g *Game[S, T, P]) CurrentPlayers() Players[T, P] {
 	return pie.Map(g.Header.CPIDS, func(pid PID) P { return g.PlayerByPID(pid) })
 }
 
-// currentPlayer returns the player whose turn it is.
+// CurrentPlayer returns the player whose turn it is.
 func (g *Game[S, T, P]) CurrentPlayer() P {
 	return pie.First(g.CurrentPlayers())
 }
 
-// Returns player asssociated with user if such player is current player
-// Otherwise, return nil
-func (g *Game[S, T, P]) CurrentPlayerFor(u *User) P {
-	i := g.Header.IndexFor(u.ID)
-	if i == -1 {
+// CurrentPlayerFor returns player asssociated with user if such player is current player
+// CurrentPlayerFor also returns true if player asssociated with user is found.
+// Otherwise, returns false.
+func (g *Game[S, T, P]) CurrentPlayerFor(u *User) (P, bool) {
+	i, found := g.Header.IndexFor(u.ID)
+	if !found {
 		var zerop P
-		return zerop
+		return zerop, false
 	}
 
-	return g.PlayerByPID(i.ToPID())
+	return g.PlayerByPID(i.ToPID()), true
 }
 
-func (g *Game[S, T, P]) SetCurrentPlayers(ps ...PID) {
-	g.Header.CPIDS = slices.Clone(ps)
+// SetCurrentPlayers sets the current players to those associated with provided player ids.
+// SetCurrentPlayers also returns player ids of player that were not already a current player.
+// The returned player ids is helpful for determining to whom turn notifications should be sent
+func (g *Game[S, T, P]) SetCurrentPlayers(pids ...PID) []PID {
+	added, _ := pie.Diff(g.Header.CPIDS, pids)
+	g.Header.CPIDS = slices.Clone(pids)
+	return added
 }
 
-func (g *Game[S, T, P]) RemoveCurrentPlayer(pid PID) {
-	for i, pid2 := range g.Header.CPIDS {
-		if pid2 == pid {
-			g.Header.CPIDS = append(g.Header.CPIDS[:i], g.Header.CPIDS[i+1:]...)
-			return
-		}
-	}
+// RemoveFromCurrentPlayers removes from current players those associated with provided player ids.
+func (g *Game[S, T, P]) RemoveFromCurrentPlayers(pids ...PID) {
+	g.Header.CPIDS, _ = pie.Diff(pids, g.Header.CPIDS)
 }
 
-func (g *Game[S, T, P]) isCurrentPlayer(cu *User) bool {
-	return g.CurrentPlayerFor(cu).PID() != NoPID
+func (g Game[S, T, P]) isCurrentPlayer(cu *User) bool {
+	_, found := g.CurrentPlayerFor(cu)
+	return found
 }
 
-func (g *Game[S, T, P]) copyPlayers() Players[T, P] {
-	return deepCopy(g.Players)
-}
-
+// ValidatePlayerAction performs basic validations for determining whether provided user
+// can perform a player action. If user can perform player action, ValidatePlayerAction
+// returns player associated with user. Otherwise, ValidatePlayerAction returns an error.
 func (g *Game[S, T, P]) ValidatePlayerAction(cu *User) (P, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -706,17 +736,25 @@ func (g *Game[S, T, P]) ValidatePlayerAction(cu *User) (P, error) {
 	}
 }
 
+// ValidateCurrentPlayer performs basic validations for determining whether user is associated
+// with a current player (i.e., a player whose turn it is in the game).
+// If user is associated with current player, ValidateCurrentPlayer returns the associated player
+// Otherwise, ValidateCurrentPlayer returns an error
 func (g *Game[S, T, P]) ValidateCurrentPlayer(cu *User) (P, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	cp := g.CurrentPlayerFor(cu)
-	if cp.PID() == NoPID {
+	cp, found := g.CurrentPlayerFor(cu)
+	if !found {
 		return cp, ErrPlayerNotFound
 	}
 	return cp, nil
 }
 
+// ValidateFinishTurn performs basic validations for determining whether user is associated
+// with a player (i.e., a player whose turn it is in the game) that can finish their turn.
+// If user can finish a turn, ValidateFinishTurn returns the associated player
+// Otherwise, ValidateFinishTurn returns an error
 func (g *Game[S, T, P]) ValidateFinishTurn(cu *User) (P, error) {
 	cp, err := g.ValidateCurrentPlayer(cu)
 	switch {
@@ -752,6 +790,11 @@ func (g *Game[S, T, P]) reset(pids ...PID) {
 	}
 }
 
+type uidsForPidser interface {
+	UIDSForPIDS([]PID) []UID
+}
+
+// UIDSForPIDS returns the user ids for the users associated with the given player ids.
 func (g *Game[S, T, P]) UIDSForPIDS(pids []PID) []UID {
 	return pie.Map(pids, func(pid PID) UID { return g.UIDForPID(pid) })
 }
@@ -778,10 +821,6 @@ func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
 	return zerop
 }
 
-const maxPlayers = 6
-
-const gameOver Phase = "Game Over"
-
 func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -789,9 +828,9 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	places := g.setFinishOrder(g.Compare)
 	g.getHeader().Status = Completed
 	g.getHeader().EndedAt = time.Now()
-	g.getHeader().Phase = gameOver
+	g.getHeader().Phase = "Game Over"
 
-	stats, err := cl.GetUStats(ctx, maxPlayers, g.getHeader().UserIDS...)
+	stats, err := cl.getUStats(ctx, g.getHeader().UserIDS...)
 	if err != nil {
 		JErr(ctx, err)
 		return
@@ -807,24 +846,22 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	rs := g.getResults(oldElos, newElos)
 	g.newEntry("game-results", H{"Results": rs}, g.getHeader().EndedAt)
 
-	err = cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCommit(c, tx, g, cu); err != nil {
+	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		if err := cl.txCommit(tx, g, cu); err != nil {
 			return err
 		}
 
-		if err := cl.SaveUStatsIn(tx, stats); err != nil {
+		if err := cl.txSaveUStats(tx, stats); err != nil {
 			return err
 		}
 
-		return cl.SaveElosIn(tx, newElos)
-	})
-	if err != nil {
+		return cl.txSaveElos(tx, newElos)
+	}); err != nil {
 		JErr(ctx, err)
 		return
 	}
 
-	err = g.sendEndGameNotifications(ctx, rs)
-	if err != nil {
+	if err := g.sendEndGameNotifications(rs); err != nil {
 		// log but otherwise ignore send errors
 		slog.Warn(err.Error())
 	}
@@ -832,7 +869,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 
 }
 
-func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) PlacesMap {
+func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) placesMap {
 	// Set to no current player
 	g.SetCurrentPlayers()
 
@@ -840,7 +877,7 @@ func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) PlacesMap {
 	g.sortPlayers(compare)
 
 	place := 1
-	places := make(PlacesMap, len(g.Players))
+	places := make(placesMap, len(g.Players))
 	for i, p1 := range g.Players {
 		// Update player stats
 		p1.getStats().Finish = place
@@ -854,10 +891,11 @@ func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) PlacesMap {
 
 		// If next player in order is tied with current player, place is not changed.
 		// Otherwise, increment place
+		const equalTo = 0
 		if j := i + 1; j < len(g.Players) {
 			p2 := g.Players[j]
-			if compare(p1.PID(), p2.PID()) != EqualTo {
-				place += 1
+			if compare(p1.PID(), p2.PID()) != equalTo {
+				place++
 			}
 		}
 
@@ -881,7 +919,7 @@ func (g *Game[S, T, P]) updateOrder() {
 
 type results []result
 
-func (g *Game[S, T, P]) getResults(oldElos, newElos []Elo) results {
+func (g *Game[S, T, P]) getResults(oldElos, newElos []elo) results {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
@@ -900,7 +938,7 @@ func (g *Game[S, T, P]) getResults(oldElos, newElos []Elo) results {
 	return rs
 }
 
-func (g *Game[S, T, P]) sendEndGameNotifications(ctx *gin.Context, rs results) error {
+func (g *Game[S, T, P]) sendEndGameNotifications(rs results) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
@@ -982,6 +1020,7 @@ func (g *Game[S, T, P]) newPlayer(i int) P {
 	return p2
 }
 
+// Start provides initial game setup and starts play of the game.
 func (g *Game[S, T, P]) Start(h Header) PID {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -1005,7 +1044,7 @@ func (g *Game[S, T, P]) Views() ([]UID, []*Game[S, T, P]) {
 }
 
 // ViewFor implements part of Viewer interface
-func (g *Game[S, T, P]) ViewFor(uid UID) *Game[S, T, P] {
+func (g *Game[S, T, P]) ViewFor(_ UID) *Game[S, T, P] {
 	return g.DeepCopy()
 }
 

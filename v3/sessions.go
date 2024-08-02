@@ -3,7 +3,6 @@ package sn
 import (
 	"context"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -16,22 +15,6 @@ import (
 func init() {
 	gob.RegisterName("SessionToken", new(SessionToken))
 }
-
-// ErrMissingToken signals that expected session token is missing
-var ErrMissingToken = fmt.Errorf("missing token")
-
-const (
-	emailKey    = "email"
-	nameKey     = "name"
-	stateKey    = "state"
-	redirectKey = "redirect"
-	sessionName = "sng-oauth"
-	sessionKey  = "session"
-)
-
-// type session struct {
-// 	sessions.Session
-// }
 
 func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 	slog.Debug(msgEnter)
@@ -54,8 +37,6 @@ func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 	return token, err
 }
 
-const notFound = false
-
 func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -77,35 +58,26 @@ func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
 		return nil, ErrNotLoggedIn
 	}
 
-	return token.toUser(), nil
+	return token.ToUser(), nil
 }
 
-func (s *SessionToken) toUser() *User {
+// ToUser returns a user from the session token
+func (s *SessionToken) ToUser() *User {
 	return &User{ID: s.ID, userData: s.Data}
 }
 
-func TokenFrom(u *User, sub string) *SessionToken {
+func tokenFrom(u *User, sub string) *SessionToken {
 	return &SessionToken{ID: u.ID, Sub: sub, Data: u.userData}
 }
 
-// func (cl *Client) isAdminSession(ctx *gin.Context) bool {
-// 	slog.Debug(msgEnter)
-// 	defer slog.Debug(msgExit)
-//
-// 	token, found := cl.GetSessionToken(ctx)
-// 	if !found {
-// 		return false
-// 	}
-//
-// 	return token.Data.Admin
-// }
-
+// SessionToken represents a session for a user
 type SessionToken struct {
 	ID   UID
 	Sub  string
 	Data userData
 }
 
+// SetSessionToken creates and stores a new session token for user and its associated subscription
 func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -114,99 +86,30 @@ func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
 		return
 	}
 
-	cl.session(ctx).Set(sessionKey, TokenFrom(u, sub))
+	cl.Session(ctx).Set("session", tokenFrom(u, sub))
 }
 
+// GetSessionToken returns session token for user and its associated subscription
 func (cl *Client) GetSessionToken(ctx *gin.Context) *SessionToken {
-	token, ok := cl.session(ctx).Get(sessionKey).(*SessionToken)
+	token, ok := cl.Session(ctx).Get("session").(*SessionToken)
 	if !ok {
 		return nil
 	}
 	return token
 }
 
+// SaveSession saves the current session
 func (cl *Client) SaveSession(ctx *gin.Context) error {
-	return cl.session(ctx).Save()
+	return cl.Session(ctx).Save()
 }
 
+// ClearSession clears the current session
 func (cl *Client) ClearSession(ctx *gin.Context) {
-	cl.session(ctx).Clear()
+	cl.Session(ctx).Clear()
 }
 
-func (cl *Client) GetNewUser(ctx *gin.Context) (*User, error) {
-	token := cl.GetSessionToken(ctx)
-	if token == nil {
-		return nil, ErrNotLoggedIn
-	}
-
-	if token.ID != 0 {
-		return nil, errors.New("user present, no need for new one.")
-	}
-
-	u := token.toUser()
-	u.Name = cl.getSessionUserName(ctx)
-	if u.Name == "" {
-		return nil, errors.New("session missing user name.")
-	}
-
-	u.Email = cl.getSessionUserEmail(ctx)
-	if u.Email == "" {
-		return nil, errors.New("session missing user email.")
-	}
-
-	return u, nil
-}
-
-func (cl *Client) SetSessionUserEmail(ctx *gin.Context, email string) {
-	cl.session(ctx).Set(emailKey, email)
-}
-
-func (cl *Client) getSessionUserEmail(ctx *gin.Context) string {
-	email, ok := cl.session(ctx).Get(emailKey).(string)
-	if !ok {
-		return ""
-	}
-	return email
-}
-
-func (cl *Client) SetSessionUserName(ctx *gin.Context, name string) {
-	cl.session(ctx).Set(nameKey, name)
-}
-
-func (cl *Client) SetSessionState(ctx *gin.Context, state string) {
-	cl.session(ctx).Set(stateKey, state)
-}
-
-func (cl *Client) GetSessionState(ctx *gin.Context) string {
-	state, ok := cl.session(ctx).Get(stateKey).(string)
-	slog.Debug(fmt.Sprintf("state: %v, statekey: %v, ok: %v", state, stateKey, ok))
-	if !ok {
-		return ""
-	}
-	return state
-}
-
-func (cl *Client) SetSessionRedirect(ctx *gin.Context, redirect string) {
-	cl.session(ctx).Set(redirectKey, redirect)
-}
-
-func (cl *Client) GetSessionRedirect(ctx *gin.Context) string {
-	redirect, ok := cl.session(ctx).Get(redirectKey).(string)
-	if !ok {
-		return ""
-	}
-	return redirect
-}
-
-func (cl *Client) getSessionUserName(ctx *gin.Context) string {
-	name, ok := cl.session(ctx).Get(nameKey).(string)
-	if !ok {
-		return ""
-	}
-	return name
-}
-
-func (cl *Client) session(ctx *gin.Context) sessions.Session {
+// Session returns the session tied to the client
+func (cl *Client) Session(ctx *gin.Context) sessions.Session {
 	return sessions.Default(ctx)
 }
 
@@ -234,6 +137,6 @@ func (cl *Client) initSession(ctx context.Context) *Client {
 		}
 		store.Options(opts)
 	}
-	cl.Router.Use(sessions.Sessions(sessionName, store))
+	cl.Router.Use(sessions.Sessions("sng-oauth", store))
 	return cl
 }

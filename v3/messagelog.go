@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Message represents a chat message
 type Message struct {
 	Text             string
 	CreatorID        UID
@@ -21,7 +22,7 @@ type Message struct {
 	UpdatedAt        time.Time
 }
 
-func NewMessage(u *User, text string) Message {
+func newMessage(u *User, text string) Message {
 	t := time.Now()
 	return Message{
 		Text:             text,
@@ -92,7 +93,7 @@ func getMessage(ctx *gin.Context) (Message, error) {
 	if err := ctx.ShouldBind(&obj); err != nil {
 		return Message{}, err
 	}
-	return NewMessage(obj.Creator, obj.Text), nil
+	return newMessage(obj.Creator, obj.Text), nil
 }
 
 func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {

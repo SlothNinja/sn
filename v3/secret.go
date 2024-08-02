@@ -75,6 +75,12 @@ func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, erro
 
 	s := new(sessionSecret)
 	err = secretsDS.Get(ctx, secretsKey(), s)
+	if err != nil {
+		return nil, err
+	}
+
+	k := secretsKey().Encode()
+	cl.Cache.Set(k, s, 0)
 	return s, err
 }
 

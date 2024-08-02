@@ -60,39 +60,14 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 	}
 }
 
-const fsTokenKey = "FS_TOKEN_KEY"
-
 func getFSTokenKey() string {
-	return os.Getenv(fsTokenKey)
+	return os.Getenv("FS_TOKEN_KEY")
 }
 
+// UID represent a unique id of a user
 type UID int64
-
-const noUID UID = 0
-
-const (
-	uidParam        = "uid"
-	guserKey        = "guser"
-	currentKey      = "current"
-	userKey         = "User"
-	salt            = "slothninja"
-	usersKey        = "Users"
-	USER_PROJECT_ID = "USER_PROJECT_ID"
-	DS_USER_HOST    = "DS_USER_HOST"
-)
 
 func getUID(ctx *gin.Context, param string) (UID, error) {
 	id, err := strconv.ParseInt(ctx.Param(param), 10, 64)
 	return UID(id), err
 }
-
-// func (u User) MarshalJSON() ([]byte, error) {
-// 	type usr User
-// 	return json.Marshal(struct {
-// 		usr
-// 		ID UID
-// 	}{
-// 		usr: usr(u),
-// 		ID:  u.ID,
-// 	})
-// }

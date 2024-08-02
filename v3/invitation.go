@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"firebase.google.com/go/v4/messaging"
 	"github.com/Pallinder/go-randomdata"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
-
-const invitationKind = "Invitation"
-const hashKind = "Hash"
 
 type invitation struct{ Header }
 
@@ -25,11 +23,11 @@ func (cl *GameClient[GT, G]) invitationDocRef(id string) *firestore.DocumentRef 
 }
 
 func (cl *GameClient[GT, G]) invitationCollectionRef() *firestore.CollectionRef {
-	return cl.FS.Collection(invitationKind)
+	return cl.FS.Collection("Invitation")
 }
 
 func (cl *GameClient[GT, G]) hashDocRef(id string) *firestore.DocumentRef {
-	return cl.invitationDocRef(id).Collection(hashKind).Doc("hash")
+	return cl.invitationDocRef(id).Collection("Hash").Doc("hash")
 }
 
 func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
@@ -103,12 +101,12 @@ func (cl *GameClient[GT, G]) getHash(ctx context.Context, id string) ([]byte, er
 }
 
 func (cl *GameClient[GT, G]) deleteInvitation(ctx context.Context, id string) error {
-	return cl.FS.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		return cl.deleteInvitationIn(ctx, tx, id)
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txDeleteInvitation(tx, id)
 	})
 }
 
-func (cl *GameClient[GT, G]) deleteInvitationIn(ctx context.Context, tx *firestore.Transaction, id string) error {
+func (cl *GameClient[GT, G]) txDeleteInvitation(tx *firestore.Transaction, id string) error {
 	ref := cl.invitationDocRef(id)
 	if err := tx.Delete(ref); err != nil {
 		return err
@@ -144,27 +142,32 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 		}
 
 		var inv invitation
-		inv, hash, err := FromForm(ctx, cu)
+		inv, hash, token, err := fromForm(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		if err := cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
+		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 			t := time.Now()
 			inv.CreatedAt, inv.UpdatedAt = t, t
 			ref := cl.invitationCollectionRef().NewDoc()
 			if err := tx.Create(ref, inv); err != nil {
 				return err
 			}
+			inv.ID = ref.ID
 
-			if err := tx.Create(cl.hashDocRef(ref.ID), gin.H{"Hash": hash}); err != nil {
-				return err
+			if len(hash) > 0 {
+				return tx.Create(cl.hashDocRef(inv.ID), gin.H{"Hash": hash})
 			}
 			return nil
 		}); err != nil {
 			JErr(ctx, err)
 			return
+		}
+
+		if err := cl.updateSubs(ctx, inv.ID, token, cu.ID); err != nil {
+			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", token, err))
 		}
 
 		inv2 := inv
@@ -176,7 +179,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	}
 }
 
-func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
+func fromForm(ctx *gin.Context, cu *User) (invitation, []byte, SubToken, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
@@ -186,11 +189,12 @@ func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
 		NumPlayers int
 		OptString  string
 		Password   string
+		Token      SubToken
 	}{}
 
 	err := ctx.ShouldBind(&obj)
 	if err != nil {
-		return invitation{}, nil, err
+		return invitation{}, nil, "", err
 	}
 
 	var inv invitation
@@ -208,13 +212,13 @@ func FromForm(ctx *gin.Context, cu *User) (invitation, []byte, error) {
 	if len(obj.Password) > 0 {
 		hash, err = bcrypt.GenerateFromPassword([]byte(obj.Password), bcrypt.DefaultCost)
 		if err != nil {
-			return invitation{}, nil, err
+			return invitation{}, nil, "", err
 		}
 		inv.Private = true
 	}
 	inv.addCreator(cu)
 	inv.addUser(cu)
-	return inv, hash, nil
+	return inv, hash, obj.Token, nil
 }
 
 func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
@@ -245,6 +249,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 		obj := struct {
 			Password string
+			Token    SubToken
 		}{}
 
 		err = ctx.ShouldBind(&obj)
@@ -258,6 +263,37 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			JErr(ctx, err)
 			return
 		}
+
+		slog.Debug(fmt.Sprintf("obj: %#v", obj))
+		if err := cl.updateSubs(ctx, inv.ID, obj.Token, cu.ID); err != nil {
+			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", obj.Token, err))
+		}
+
+		go func() {
+			notifications := &messaging.MulticastMessage{
+				Tokens: []string{string(obj.Token)},
+				Notification: &messaging.Notification{
+					Title:    "You joined game",
+					Body:     "Thanks for joining game.",
+					ImageURL: "https://tammany.slothninja.com/logo.png",
+				},
+				Webpush: &messaging.WebpushConfig{
+					FCMOptions: &messaging.WebpushFCMOptions{
+						Link: "https://www.slothninja.com",
+					},
+				},
+			}
+			responses, err := cl.FCM.SendEachForMulticast(ctx, notifications)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("attempted to send join notifications to: %v: %v", obj.Token, err))
+			}
+			slog.Warn(fmt.Sprintf("batch send responses: %#v", responses))
+			if responses != nil {
+				for _, response := range responses.Responses {
+					slog.Warn(fmt.Sprintf("batch send response: %#v", response.Error))
+				}
+			}
+		}()
 
 		if !start {
 			inv.UpdatedAt = time.Now()
@@ -277,15 +313,23 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(c, tx, g, cu); err != nil {
+		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+			if err := cl.txSave(tx, g, cu); err != nil {
 				return err
 			}
-			return cl.deleteInvitationIn(ctx, tx, inv.ID)
+			return cl.txDeleteInvitation(tx, inv.ID)
 		}); err != nil {
 			JErr(ctx, err)
 			return
 		}
+
+		go func() {
+			responses, err := cl.sendNotifications(ctx, g, g.getHeader().CPIDS)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("attempted to send notifications to: %v: %v", g.getHeader().CPIDS, err))
+			}
+			slog.Warn(fmt.Sprintf("batch send response: %v", responses))
+		}()
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cpid)})
 	}
@@ -368,9 +412,14 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 		} else {
 			err = cl.deleteInvitation(ctx, inv.ID)
 		}
+
 		if err != nil {
 			JErr(ctx, err)
 			return
+		}
+
+		if err := cl.removeSubs(ctx, inv.ID, cu.ID); err != nil {
+			slog.Warn(fmt.Sprintf("error removing subs for %v: %v", cu.ID, err))
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.dropGameMessage(cu)})
@@ -411,8 +460,8 @@ func (h *Header) hasUser(u *User) bool {
 }
 
 func (inv *invitation) removeUser(u2 *User) {
-	i := inv.IndexFor(u2.ID)
-	if i == UIndexNotFound {
+	i, found := inv.IndexFor(u2.ID)
+	if !found {
 		return
 	}
 
@@ -443,4 +492,64 @@ func (inv *invitation) addCreator(u *User) {
 	inv.CreatorEmailHash = u.EmailHash
 	inv.CreatorEmailNotifications = u.EmailNotifications
 	inv.CreatorGravType = u.GravType
+}
+
+type detail struct {
+	ID     UID
+	ELO    int
+	Played int64
+	Won    int64
+	WP     float32
+}
+
+func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
+
+		inv, err := cl.getInvitation(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		cu, err := cl.RequireLogin(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		uids := make([]UID, len(inv.UserIDS))
+		copy(uids, inv.UserIDS)
+
+		if hasUID := pie.Any(inv.UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
+			uids = append(uids, cu.ID)
+		}
+
+		elos, err := cl.getElos(ctx, uids...)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		ustats, err := cl.getUStats(ctx, uids...)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		details := make([]detail, len(elos))
+		for i := range elos {
+			played, won, wp := ustats[i].Played, ustats[i].Won, ustats[i].WinPercentage
+			details[i] = detail{
+				ID:     elos[i].ID,
+				ELO:    elos[i].Rating,
+				Played: played,
+				Won:    won,
+				WP:     wp,
+			}
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"Details": details})
+	}
 }

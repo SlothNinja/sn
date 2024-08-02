@@ -1,11 +1,5 @@
 package sn
 
-import (
-	"strings"
-
-	"github.com/elliotchance/pie/v2"
-)
-
 // Type represents a type of game.
 type Type string
 
@@ -53,12 +47,4 @@ func (t Type) String() string {
 		return s
 	}
 	return ""
-}
-
-func ToType(s string) Type {
-	t := Type(strings.ToLower(s))
-	if pie.Contains(types(), t) {
-		return t
-	}
-	return NoType
 }

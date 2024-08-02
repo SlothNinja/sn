@@ -1,4 +1,4 @@
-// SN implements services for SlothNinja Games Website
+// Package sn implements services for SlothNinja Games Website
 package sn
 
 import (
@@ -11,21 +11,26 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/messaging"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/iterator"
 )
 
+// Client provides a client for a service
 type Client struct {
 	Cache  *cache.Cache
 	Router *gin.Engine
 	options
 }
 
+// GameClient provides a client for a game service
 type GameClient[GT any, G Gamer[GT]] struct {
 	*Client
-	FS *firestore.Client
+	FS  *firestore.Client
+	FCM *messaging.Client
 }
 
 func defaultClient() *Client {
@@ -44,6 +49,7 @@ func defaultClient() *Client {
 	return cl
 }
 
+// NewClient returns a new service client
 func NewClient(ctx context.Context, opts ...Option) *Client {
 	cl := defaultClient()
 
@@ -84,12 +90,20 @@ func (cl *Client) initEnvironment() *Client {
 	return cl
 }
 
+// NewGameClient returns a new game service client
 func NewGameClient[GT any, G Gamer[GT]](ctx context.Context, opts ...Option) *GameClient[GT, G] {
 	cl := &GameClient[GT, G]{Client: NewClient(ctx, opts...)}
 
-	var err error
-	if cl.FS, err = firestore.NewClient(ctx, cl.projectID); err != nil {
+	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: cl.projectID})
+	if err != nil {
+		panic(fmt.Errorf("unable to connect to create firebase app: %w", err))
+	}
+	if cl.FS, err = app.Firestore(ctx); err != nil {
 		panic(fmt.Errorf("unable to connect to firestore database: %w", err))
+	}
+
+	if cl.FCM, err = app.Messaging(ctx); err != nil {
+		panic(fmt.Errorf("unable to connect to firebase messaging: %w", err))
 	}
 	return cl.addRoutes(cl.prefix)
 }
@@ -118,17 +132,17 @@ func (cl *GameClient[GT, G]) addRoutes(prefix string) *GameClient[GT, G] {
 	// New
 	iGroup.GET("/new", cl.newInvitationHandler())
 
-	// // Create
+	// Create
 	iGroup.PUT("/new", cl.createInvitationHandler())
 
-	// // Drop
+	// Drop
 	iGroup.PUT("/drop/:id", cl.dropHandler())
 
-	// // Accept
+	// Accept
 	iGroup.PUT("/accept/:id", cl.acceptHandler())
 
-	// // Details
-	// iGroup.GET("/details/:id", cl.detailsHandler())
+	// Details
+	iGroup.GET("/details/:id", cl.detailsHandler())
 
 	// Abort
 	iGroup.PUT("abort/:id", cl.abortHandler())
@@ -168,12 +182,13 @@ func (cl *GameClient[GT, G]) addRoutes(prefix string) *GameClient[GT, G] {
 	return cl
 }
 
+// Close closes client
 func (cl *Client) Close() error {
 	return nil
 }
 
 func (cl *GameClient[GT, G]) revCollectionRef(gid string) *firestore.CollectionRef {
-	return cl.gameDocRef(gid).Collection(revKind)
+	return cl.gameDocRef(gid).Collection("Rev")
 }
 
 func (cl *GameClient[GT, G]) revDocRef(gid string, rev int) *firestore.DocumentRef {
@@ -185,7 +200,7 @@ func (cl *GameClient[GT, G]) gameDocRef(gid string) *firestore.DocumentRef {
 }
 
 func (cl *GameClient[GT, G]) gameCollectionRef() *firestore.CollectionRef {
-	return cl.FS.Collection(gameKind)
+	return cl.FS.Collection("Game")
 }
 
 func (cl *GameClient[GT, G]) cachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
@@ -193,7 +208,7 @@ func (cl *GameClient[GT, G]) cachedDocRef(id string, rev int, uid UID, crev int)
 }
 
 func (cl *GameClient[GT, G]) cachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection(cacheKind).Doc(strconv.Itoa(int(uid))).Collection(revKind)
+	return cl.revDocRef(id, rev).Collection("CacheFor").Doc(strconv.Itoa(int(uid))).Collection("Rev")
 }
 
 func (cl *GameClient[GT, G]) fullyCachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
@@ -202,7 +217,7 @@ func (cl *GameClient[GT, G]) fullyCachedDocRef(id string, rev int, uid UID, crev
 }
 
 func (cl *GameClient[GT, G]) fullyCachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection(fullCachedKind).Doc(strconv.Itoa(int(uid))).Collection(revKind)
+	return cl.revDocRef(id, rev).Collection("FullCacheFor").Doc(strconv.Itoa(int(uid))).Collection("Rev")
 }
 
 func (cl *GameClient[GT, G]) messageDocRef(gid string, mid string) *firestore.DocumentRef {
@@ -210,7 +225,7 @@ func (cl *GameClient[GT, G]) messageDocRef(gid string, mid string) *firestore.Do
 }
 
 func (cl *GameClient[GT, G]) messagesCollectionRef(gid string) *firestore.CollectionRef {
-	return cl.committedCollectionRef().Doc(gid).Collection(messagesKind)
+	return cl.committedCollectionRef().Doc(gid).Collection("Messages")
 }
 
 func (cl *GameClient[GT, G]) committedDocRef(gid string, rev int) *firestore.DocumentRef {
@@ -218,21 +233,22 @@ func (cl *GameClient[GT, G]) committedDocRef(gid string, rev int) *firestore.Doc
 }
 
 func (cl *GameClient[GT, G]) committedCollectionRef() *firestore.CollectionRef {
-	return cl.FS.Collection(gameKind)
+	return cl.FS.Collection("Game")
 }
 
 func (cl *GameClient[GT, G]) indexDocRef(id string) *firestore.DocumentRef {
-	return cl.FS.Collection(indexKind).Doc(id)
+	return cl.FS.Collection("Index").Doc(id)
 }
 
 func (cl *GameClient[GT, G]) viewCollectionRef(id string, rev int) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection(viewKind)
+	return cl.revDocRef(id, rev).Collection("ViewFor")
 }
 
 func (cl *GameClient[GT, G]) viewDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
 	return cl.viewCollectionRef(id, rev).Doc(strconv.Itoa(int(uid)))
 }
 
+// Close closes the game service client
 func (cl *GameClient[GT, G]) Close() error {
 	cl.FS.Close()
 	return cl.Client.Close()
@@ -242,12 +258,12 @@ func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.txCommit(c, tx, g, u)
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txCommit(tx, g, u)
 	})
 }
 
-func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
@@ -260,24 +276,24 @@ func (cl *GameClient[GT, G]) txCommit(ctx context.Context, tx *firestore.Transac
 		return fmt.Errorf("unexpected game change")
 	}
 
-	if err := cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID); err != nil {
+	if err := cl.txClearCached(tx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID); err != nil {
 		return err
 	}
 
 	g.getHeader().Undo.Commit()
-	return cl.txSave(ctx, tx, g, u)
+	return cl.txSave(tx, g, u)
 }
 
 func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	return cl.FS.RunTransaction(ctx, func(c context.Context, tx *firestore.Transaction) error {
-		return cl.txSave(c, tx, g, u)
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txSave(tx, g, u)
 	})
 }
 
-func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
@@ -300,14 +316,20 @@ func (cl *GameClient[GT, G]) txSave(ctx context.Context, tx *firestore.Transacti
 			return err
 		}
 	}
-	return cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID)
+	return cl.txClearCached(tx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID)
 }
 
 func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txClearCached(tx, gid, rev, uid)
+	})
+}
+
+func (cl *GameClient[GT, G]) txClearCached(tx *firestore.Transaction, gid string, rev int, uid UID) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
+	refs := tx.DocumentRefs(cl.cachedCollectionRef(gid, rev, uid))
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -317,13 +339,10 @@ func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev in
 			return err
 		}
 
-		_, err = ref.Delete(ctx)
-		if err != nil {
-			return err
-		}
+		return tx.Delete(ref)
 	}
 
-	refs = cl.fullyCachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
+	refs = tx.DocumentRefs(cl.fullyCachedCollectionRef(gid, rev, uid))
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -333,13 +352,10 @@ func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev in
 			return err
 		}
 
-		_, err = ref.Delete(ctx)
-		if err != nil {
-			return err
-		}
+		return tx.Delete(ref)
 	}
 
-	return cl.deleteStack(ctx, gid, uid)
+	return cl.txDeleteStack(tx, gid, uid)
 }
 
 func docRefFor(ref *firestore.DocumentRef, uid UID) bool {
@@ -350,38 +366,3 @@ func docRefFor(ref *firestore.DocumentRef, uid UID) bool {
 	}
 	return *s == fmt.Sprintf("%d", uid)
 }
-
-type detail struct {
-	ID     int64
-	ELO    int
-	Played int64
-	Won    int64
-	WP     float32
-}
-
-// func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
-// 	return func(ctx *gin.Context) {
-// 		cl.Log.Debugf(msgEnter)
-// 		defer cl.Log.Debugf(msgExit)
-//
-// 		inv, err := cl.getInvitation(ctx)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		cu, err := cl.RequireLogin(ctx)
-// 		if err != nil {
-// 			JErr(ctx, err)
-// 			return
-// 		}
-//
-// 		uids := make([]UID, len(inv.getHeader().UserIDS))
-// 		copy(uids, inv.getHeader().UserIDS)
-//
-// 		if hasUID := pie.Any(inv.getHeader().UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
-// 			uids = append(uids, cu.ID)
-// 		}
-//
-// 	}
-// }

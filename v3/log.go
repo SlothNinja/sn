@@ -9,7 +9,7 @@ func init() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     getLogLevel(),
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			switch a.Key {
 			case slog.LevelKey:
 				a.Key = "severity"
@@ -20,6 +20,11 @@ func init() {
 		},
 	})))
 }
+
+const (
+	msgEnter = "Entering"
+	msgExit  = "Exiting"
+)
 
 func getLogLevel() slog.Level {
 	s, found := os.LookupEnv("LOGLEVEL")
