@@ -837,7 +837,8 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	}
 	stats = g.updateUStats(stats, g.playerStats(), g.playerUIDS())
 
-	oldElos, newElos, err := cl.updateElo(ctx, g.getHeader().UserIDS, places)
+	uids := g.getHeader().UserIDS
+	oldElos, newElos, err := cl.updateElo(ctx, uids, places)
 	if err != nil {
 		JErr(ctx, err)
 		return
@@ -855,7 +856,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 			return err
 		}
 
-		return cl.txSaveElos(tx, newElos)
+		return cl.txSaveElos(tx, uids, newElos)
 	}); err != nil {
 		JErr(ctx, err)
 		return

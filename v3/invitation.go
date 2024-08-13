@@ -542,7 +542,7 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 		for i := range elos {
 			played, won, wp := ustats[i].Played, ustats[i].Won, ustats[i].WinPercentage
 			details[i] = detail{
-				ID:     elos[i].ID,
+				ID:     uids[i],
 				ELO:    elos[i].Rating,
 				Played: played,
 				Won:    won,

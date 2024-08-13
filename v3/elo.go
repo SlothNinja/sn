@@ -12,14 +12,13 @@ import (
 )
 
 type elo struct {
-	ID        UID
 	Rating    int
 	UpdatedAt time.Time
 }
 
 func newEloDefault(uid UID) elo {
 	const defaultRating = 1500
-	return elo{ID: uid, Rating: defaultRating}
+	return elo{Rating: defaultRating}
 }
 
 func (cl *GameClient[GT, G]) eloDocRef(uid UID) *firestore.DocumentRef {
@@ -61,12 +60,16 @@ func updateEloFor(uid1 UID, elos eloMap, places placesMap) int {
 	return elos[uid1].Rating + delta
 }
 
-func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, elos []elo) error {
-	for _, elo := range elos {
-		if err := tx.Set(cl.eloDocRef(elo.ID), elo); err != nil {
+func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, uids []UID, elos []elo) error {
+	if len(uids) != len(elos) {
+		return fmt.Errorf("len(uids) must equal len(elos)")
+	}
+
+	for i, elo := range elos {
+		if err := tx.Set(cl.eloDocRef(uids[i]), elo); err != nil {
 			return err
 		}
-		if err := tx.Create(cl.eloHistoryRef(elo.ID).NewDoc(), elo); err != nil {
+		if err := tx.Create(cl.eloHistoryRef(uids[i]).NewDoc(), elo); err != nil {
 			return err
 		}
 	}
@@ -119,7 +122,6 @@ func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, uids []UID, places plac
 	newElos := make([]elo, len(uids))
 	for i, uid := range uids {
 		newElos[i] = elo{
-			ID:        uid,
 			Rating:    updateEloFor(uid, eloMap, places),
 			UpdatedAt: t,
 		}
