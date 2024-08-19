@@ -522,11 +522,15 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 		uids := make([]UID, len(inv.UserIDS))
 		copy(uids, inv.UserIDS)
 
+		us := make([]User, len(inv.Users()))
+		copy(us, inv.Users())
+
 		if hasUID := pie.Any(inv.UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
 			uids = append(uids, cu.ID)
+			us = append(us, *cu)
 		}
 
-		elos, err := cl.getElos(ctx, uids...)
+		elos, err := cl.getElos(ctx, inv.Users()...)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -548,6 +552,7 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 				Won:    won,
 				WP:     wp,
 			}
+			slog.Debug(fmt.Sprintf("details[%v]: ", uids[i], details[i]))
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{"Details": details})

@@ -12,13 +12,24 @@ import (
 )
 
 type elo struct {
+	UID       UID
+	Name      string
+	EmailHash string
+	GravType  string
 	Rating    int
 	UpdatedAt time.Time
 }
 
-func newEloDefault(uid UID) elo {
+func newEloDefault(u User) elo {
 	const defaultRating = 1500
-	return elo{Rating: defaultRating}
+	return elo{
+		UID:       u.ID,
+		Name:      u.Name,
+		EmailHash: u.EmailHash,
+		GravType:  u.GravType,
+		Rating:    defaultRating,
+		UpdatedAt: time.Now(),
+	}
 }
 
 func (cl *GameClient[GT, G]) eloDocRef(uid UID) *firestore.DocumentRef {
@@ -60,27 +71,23 @@ func updateEloFor(uid1 UID, elos eloMap, places placesMap) int {
 	return elos[uid1].Rating + delta
 }
 
-func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, uids []UID, elos []elo) error {
-	if len(uids) != len(elos) {
-		return fmt.Errorf("len(uids) must equal len(elos)")
-	}
-
+func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, elos []elo) error {
 	for i, elo := range elos {
-		if err := tx.Set(cl.eloDocRef(uids[i]), elo); err != nil {
+		if err := tx.Set(cl.eloDocRef(elos[i].UID), elo); err != nil {
 			return err
 		}
-		if err := tx.Create(cl.eloHistoryRef(uids[i]).NewDoc(), elo); err != nil {
+		if err := tx.Create(cl.eloHistoryRef(elos[i].UID).NewDoc(), elo); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, uids ...UID) ([]elo, error) {
+func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, users ...User) ([]elo, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	refs := pie.Map(uids, func(uid UID) *firestore.DocumentRef { return cl.eloDocRef(uid) })
+	refs := pie.Map(users, func(user User) *firestore.DocumentRef { return cl.eloDocRef(user.ID) })
 	snaps, err := cl.FS.GetAll(ctx, refs)
 	if err != nil {
 		return nil, err
@@ -89,7 +96,7 @@ func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, uids ...UID) ([]elo, erro
 	elos := make([]elo, len(snaps))
 	for i, snap := range snaps {
 		if !snap.Exists() {
-			elos[i] = newEloDefault(uids[i])
+			elos[i] = newEloDefault(users[i])
 			continue
 		}
 
@@ -104,25 +111,29 @@ func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, uids ...UID) ([]elo, erro
 
 // Update pulls current Elo from db and provides rating updates and deltas per results for users associated with uids.
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uids
-func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, uids []UID, places placesMap) ([]elo, []elo, error) {
+func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, us []User, places placesMap) ([]elo, []elo, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	oldElos, err := cl.getElos(ctx, uids...)
+	oldElos, err := cl.getElos(ctx, us...)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	eloMap := make(eloMap, len(oldElos))
 	for i, elo := range oldElos {
-		eloMap[uids[i]] = elo
+		eloMap[us[i].ID] = elo
 	}
 
 	t := time.Now()
-	newElos := make([]elo, len(uids))
-	for i, uid := range uids {
+	newElos := make([]elo, len(us))
+	for i, u := range us {
 		newElos[i] = elo{
-			Rating:    updateEloFor(uid, eloMap, places),
+			UID:       u.ID,
+			Name:      u.Name,
+			EmailHash: u.EmailHash,
+			GravType:  u.GravType,
+			Rating:    updateEloFor(u.ID, eloMap, places),
 			UpdatedAt: t,
 		}
 	}

@@ -44,9 +44,6 @@ type ustat struct {
 	// Win percentage
 	WinPercentage float32
 
-	// Win percentage
-	ExpectedWinPercentage float32
-
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -56,7 +53,7 @@ func newUStat(uid UID) ustat {
 }
 
 func (cl *GameClient[GT, G]) ustatDocRef(uid UID) *firestore.DocumentRef {
-	return cl.FS.Collection("UStats").Doc(fmt.Sprintf("%d", uid))
+	return cl.FS.Collection("UStat").Doc(fmt.Sprintf("%d", uid))
 }
 
 func (g *Game[S, T, P]) updateUStats(stats []ustat, pstats []*Stats, uids []UID) []ustat {

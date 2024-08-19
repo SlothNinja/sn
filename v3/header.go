@@ -40,3 +40,15 @@ type Header struct {
 	UpdatedAt                 time.Time
 	Private                   bool
 }
+
+func (h Header) Users() []User {
+	us := make([]User, len(h.UserIDS))
+	for i, u := range us {
+		u.Name = h.UserNames[i]
+		u.Email = h.UserEmails[i]
+		u.EmailHash = h.UserEmailHashes[i]
+		u.EmailNotifications = h.UserEmailNotifications[i]
+		u.GravType = h.UserGravTypes[i]
+	}
+	return us
+}
