@@ -13,6 +13,21 @@ func init() {
 			switch a.Key {
 			case slog.LevelKey:
 				a.Key = "severity"
+
+				// // Handle custom level values.
+				// level := a.Value.Any().(slog.Level)
+				// switch {
+				// case level < slog.LevelDebug:
+				// 	a.Value = slog.StringValue("DEFAULT")
+				// case level < slog.LevelInfo:
+				// 	a.Value = slog.StringValue("DEBUG")
+				// case level < slog.LevelWarn:
+				// 	a.Value = slog.IntValue(300)
+				// case level < slog.LevelError:
+				// 	a.Value = slog.IntValue(400)
+				// default:
+				// 	a.Value = slog.IntValue(500)
+				// }
 			case slog.MessageKey:
 				a.Key = "message"
 			}
@@ -30,7 +45,7 @@ func getLogLevel() slog.Level {
 	s, found := os.LookupEnv("LOGLEVEL")
 	if found {
 		var level slog.Level
-		err := (&level).UnmarshalJSON([]byte(s))
+		err := (&level).UnmarshalText([]byte(s))
 		if err != nil {
 			return level
 		}

@@ -258,6 +258,10 @@ func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
+	if err := cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID); err != nil {
+		return err
+	}
+
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		return cl.txCommit(tx, g, u)
 	})
@@ -276,10 +280,6 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) e
 		return fmt.Errorf("unexpected game change")
 	}
 
-	if err := cl.txClearCached(tx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID); err != nil {
-		return err
-	}
-
 	g.getHeader().Undo.Commit()
 	return cl.txSave(tx, g, u)
 }
@@ -287,6 +287,10 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) e
 func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
+
+	if err := cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID); err != nil {
+		return err
+	}
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		return cl.txSave(tx, g, u)
@@ -316,20 +320,14 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u *User) err
 			return err
 		}
 	}
-	return cl.txClearCached(tx, g.getHeader().ID, g.getHeader().Undo.Committed, u.ID)
+	return nil
 }
 
 func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
-	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txClearCached(tx, gid, rev, uid)
-	})
-}
-
-func (cl *GameClient[GT, G]) txClearCached(tx *firestore.Transaction, gid string, rev int, uid UID) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	refs := tx.DocumentRefs(cl.cachedCollectionRef(gid, rev, uid))
+	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -339,10 +337,12 @@ func (cl *GameClient[GT, G]) txClearCached(tx *firestore.Transaction, gid string
 			return err
 		}
 
-		return tx.Delete(ref)
+		if _, err := ref.Delete(ctx); err != nil {
+			return err
+		}
 	}
 
-	refs = tx.DocumentRefs(cl.fullyCachedCollectionRef(gid, rev, uid))
+	refs = cl.fullyCachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
 	for {
 		ref, err := refs.Next()
 		if err == iterator.Done {
@@ -352,10 +352,12 @@ func (cl *GameClient[GT, G]) txClearCached(tx *firestore.Transaction, gid string
 			return err
 		}
 
-		return tx.Delete(ref)
+		if _, err := ref.Delete(ctx); err != nil {
+			return err
+		}
 	}
 
-	return cl.txDeleteStack(tx, gid, uid)
+	return cl.deleteStack(ctx, gid, uid)
 }
 
 func docRefFor(ref *firestore.DocumentRef, uid UID) bool {

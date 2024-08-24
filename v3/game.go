@@ -846,6 +846,11 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	rs := g.getResults(oldElos, newElos)
 	g.newEntry("game-results", H{"Results": rs}, g.getHeader().EndedAt)
 
+	if err := cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, cu.ID); err != nil {
+		JErr(ctx, err)
+		return
+	}
+
 	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		if err := cl.txCommit(tx, g, cu); err != nil {
 			return err

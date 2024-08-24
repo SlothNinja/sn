@@ -92,15 +92,9 @@ func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, 
 }
 
 func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UID) error {
-	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txDeleteStack(tx, gid, uid)
-	})
-}
-
-func (cl *GameClient[GT, G]) txDeleteStack(tx *firestore.Transaction, gid string, uid UID) error {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	ref := cl.stackDocRef(gid, uid)
-	return tx.Delete(ref)
+	_, err := cl.stackDocRef(gid, uid).Delete(ctx)
+	return err
 }

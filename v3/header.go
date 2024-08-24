@@ -1,6 +1,8 @@
 package sn
 
 import (
+	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -41,14 +43,20 @@ type Header struct {
 	Private                   bool
 }
 
-func (h Header) Users() []User {
-	us := make([]User, len(h.UserIDS))
-	for i, u := range us {
-		u.Name = h.UserNames[i]
-		u.Email = h.UserEmails[i]
-		u.EmailHash = h.UserEmailHashes[i]
-		u.EmailNotifications = h.UserEmailNotifications[i]
-		u.GravType = h.UserGravTypes[i]
+func (h Header) Users() []*User {
+	us := make([]*User, len(h.UserIDS))
+	for i := range us {
+		us[i] = &User{
+			ID: h.UserIDS[i],
+			userData: userData{
+				Name:               h.UserNames[i],
+				Email:              h.UserEmails[i],
+				EmailHash:          h.UserEmailHashes[i],
+				EmailNotifications: h.UserEmailNotifications[i],
+				GravType:           h.UserGravTypes[i],
+			},
+		}
 	}
+	slog.Debug(fmt.Sprintf("Users: %#v", us))
 	return us
 }

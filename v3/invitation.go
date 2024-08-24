@@ -264,7 +264,6 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		slog.Debug(fmt.Sprintf("obj: %#v", obj))
 		if err := cl.updateSubs(ctx, inv.ID, obj.Token, cu.ID); err != nil {
 			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", obj.Token, err))
 		}
@@ -522,15 +521,15 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 		uids := make([]UID, len(inv.UserIDS))
 		copy(uids, inv.UserIDS)
 
-		us := make([]User, len(inv.Users()))
+		us := make([]*User, len(inv.Users()))
 		copy(us, inv.Users())
 
 		if hasUID := pie.Any(inv.UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
 			uids = append(uids, cu.ID)
-			us = append(us, *cu)
+			us = append(us, cu)
 		}
 
-		elos, err := cl.getElos(ctx, inv.Users()...)
+		elos, err := cl.getElos(ctx, us...)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -552,7 +551,6 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 				Won:    won,
 				WP:     wp,
 			}
-			slog.Debug(fmt.Sprintf("details[%v]: ", uids[i], details[i]))
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{"Details": details})
