@@ -3,13 +3,14 @@ package sn
 import (
 	"encoding/json"
 	"log/slog"
-	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type entry struct {
 	Template   string
 	Data       H
-	UpdatedAt  time.Time
+	UpdatedAt  *timestamppb.Timestamp
 	SubEntries []subentry
 }
 
@@ -46,16 +47,16 @@ func deepCopy[T any](obj T) T {
 }
 
 // NewEntry adds a new log entry to the game log
-func (g *Game[S, T, P]) NewEntry(template string, data H, updatedAt time.Time) {
+func (g *Game[S, T, P]) NewEntry(template string, data H, updatedAt *timestamppb.Timestamp) {
 	g.newEntry(template, data, updatedAt)
 }
 
-func (g *Game[S, T, P]) newEntry(template string, data H, updatedAt time.Time) {
+func (g *Game[S, T, P]) newEntry(template string, data H, updatedAt *timestamppb.Timestamp) {
 	g.Log = append(g.Log, entry{Template: template, Data: data, UpdatedAt: updatedAt})
 }
 
 // UpdateLastEntry updates the last log entry in the game log
-func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt time.Time) {
+func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt *timestamppb.Timestamp) {
 	lastIndex := len(g.Log) - 1
 	if lastIndex < 0 {
 		slog.Warn("no log entry")
@@ -68,13 +69,13 @@ func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt time.Time) {
 }
 
 // NewSubEntry adds a new sub entry to the last entry in the game log
-func (g *Game[S, T, P]) NewSubEntry(template string, data H, updatedAt time.Time) {
+func (g *Game[S, T, P]) NewSubEntry(template string, data H) {
 	lastEntryIndex := len(g.Log) - 1
 	if lastEntryIndex < 0 {
 		slog.Warn("no log entry")
 		return
 	}
-	g.Log[lastEntryIndex].UpdatedAt = updatedAt
+	g.Log[lastEntryIndex].UpdatedAt = timestamppb.Now()
 	g.Log[lastEntryIndex].SubEntries = append(g.Log[lastEntryIndex].SubEntries, subentry{Template: template, Data: data})
 }
 

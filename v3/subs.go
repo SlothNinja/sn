@@ -217,3 +217,13 @@ func (cl *GameClient[GT, G]) putSubscriptions(ctx context.Context, gid string, u
 func subscriptionKey(gid string, uid UID) string {
 	return fmt.Sprintf("subkey-%s-%d", gid, uid)
 }
+
+type tokenInput struct {
+	Token SubToken
+}
+
+func getToken(ctx *gin.Context) (SubToken, error) {
+	input := new(tokenInput)
+	err := ctx.ShouldBind(input)
+	return input.Token, err
+}

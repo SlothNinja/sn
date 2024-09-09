@@ -3,7 +3,8 @@ package sn
 import (
 	"fmt"
 	"log/slog"
-	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Phase represents a game phase
@@ -36,10 +37,10 @@ type Header struct {
 	Status                    Status
 	Undo                      Stack
 	OptString                 string
-	StartedAt                 time.Time
-	EndedAt                   time.Time
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
+	StartedAt                 *timestamppb.Timestamp
+	EndedAt                   *timestamppb.Timestamp
+	CreatedAt                 *timestamppb.Timestamp
+	UpdatedAt                 *timestamppb.Timestamp
 	Private                   bool
 }
 

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"firebase.google.com/go/v4/messaging"
@@ -14,6 +13,7 @@ import (
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type invitation struct{ Header }
@@ -47,7 +47,7 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 		}
 
 		inv.Status = Aborted
-		now := time.Now()
+		now := timestamppb.Now()
 		inv.UpdatedAt = now
 		inv.EndedAt = now
 		if _, err := cl.invitationDocRef(inv.ID).Set(ctx, inv); err != nil {
@@ -149,7 +149,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			t := time.Now()
+			t := timestamppb.Now()
 			inv.CreatedAt, inv.UpdatedAt = t, t
 			ref := cl.invitationCollectionRef().NewDoc()
 			if err := tx.Create(ref, inv); err != nil {
@@ -295,7 +295,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}()
 
 		if !start {
-			inv.UpdatedAt = time.Now()
+			inv.UpdatedAt = timestamppb.Now()
 			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 			if err != nil {
 				JErr(ctx, err)
@@ -406,7 +406,7 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 		}
 
 		if len(inv.UserIDS) != 0 {
-			inv.UpdatedAt = time.Now()
+			inv.UpdatedAt = timestamppb.Now()
 			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
 		} else {
 			err = cl.deleteInvitation(ctx, inv.ID)

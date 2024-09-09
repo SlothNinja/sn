@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Message represents a chat message
@@ -18,19 +18,19 @@ type Message struct {
 	CreatorEmailHash string
 	CreatorGravType  string
 	Read             []UID
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	CreatedAt        *timestamppb.Timestamp
+	UpdatedAt        *timestamppb.Timestamp
 }
 
-func newMessage(u *User, text string) Message {
-	t := time.Now()
+func newMessageFor(m *message, user *User) Message {
+	t := timestamppb.Now()
 	return Message{
-		Text:             text,
-		CreatorID:        u.ID,
-		CreatorName:      u.Name,
-		CreatorEmailHash: u.EmailHash,
-		CreatorGravType:  u.GravType,
-		Read:             []UID{u.ID},
+		Text:             m.Text,
+		CreatorID:        user.ID,
+		CreatorName:      user.Name,
+		CreatorEmailHash: user.EmailHash,
+		CreatorGravType:  user.GravType,
+		Read:             []UID{user.ID},
 		CreatedAt:        t,
 		UpdatedAt:        t,
 	}
@@ -80,20 +80,20 @@ func getRead(ctx *gin.Context) ([]string, error) {
 	return obj.Read, err
 }
 
-func getMessage(ctx *gin.Context) (Message, error) {
+type message struct {
+	CreatorID UID
+	Text      string
+}
+
+func getMessage(ctx *gin.Context) (*message, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	var obj struct {
-		Text    string
-		Creator *User
-		Read    []string
+	obj := new(message)
+	if err := ctx.ShouldBind(obj); err != nil {
+		return nil, err
 	}
-
-	if err := ctx.ShouldBind(&obj); err != nil {
-		return Message{}, err
-	}
-	return newMessage(obj.Creator, obj.Text), nil
+	return obj, nil
 }
 
 func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
@@ -101,13 +101,19 @@ func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 		slog.Debug(msgEnter)
 		defer slog.Debug(msgExit)
 
-		m, err := cl.validateAddMessage(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		if err := cl.addMessage(ctx, m); err != nil {
+		m, err := cl.validateAddMessage(ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		if err := cl.addMessage(ctx, newMessageFor(m, cu)); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -115,22 +121,17 @@ func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context) (Message, error) {
+func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context, cu *User) (*message, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	cu, err := cl.RequireLogin(ctx)
-	if err != nil {
-		return Message{}, err
-	}
-
 	m, err := getMessage(ctx)
 	if err != nil {
-		return Message{}, err
+		return nil, err
 	}
 
 	if m.CreatorID != cu.ID {
-		return Message{}, fmt.Errorf("invalid creator: %w", ErrValidation)
+		return nil, fmt.Errorf("invalid creator: %w", ErrValidation)
 	}
 	return m, nil
 }

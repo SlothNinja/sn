@@ -17,6 +17,7 @@ import (
 	"github.com/mailjet/mailjet-apiv3-go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Game implements a game
@@ -34,7 +35,7 @@ type Gamer[G any] interface {
 
 	getHeader() *Header
 	isCurrentPlayer(*User) bool
-	newEntry(string, H, time.Time)
+	newEntry(string, H, *timestamppb.Timestamp)
 	playerStats() []*Stats
 	playerUIDS() []UID
 	ptr[G]
@@ -596,7 +597,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 func (g *Game[S, T, P]) updateStatsFor(pid PID) {
 	stats := g.statsFor(pid)
 	stats.Moves++
-	stats.Think += time.Since(g.getHeader().UpdatedAt)
+	stats.Think += time.Since(g.getHeader().UpdatedAt.AsTime())
 }
 
 func (g *Game[S, T, P]) playerUIDS() []UID {
@@ -673,7 +674,7 @@ func (ps Players[T, P]) Randomize() {
 // updates the order of such players in the Header for the game.
 func (g *Game[S, T, P]) RandomizePlayers() {
 	g.Players.Randomize()
-	g.updateOrder()
+	g.UpdateOrder()
 }
 
 // CurrentPlayers returns the players whose turn it is.
@@ -755,15 +756,21 @@ func (g *Game[S, T, P]) ValidateCurrentPlayer(cu *User) (P, error) {
 // with a player (i.e., a player whose turn it is in the game) that can finish their turn.
 // If user can finish a turn, ValidateFinishTurn returns the associated player
 // Otherwise, ValidateFinishTurn returns an error
-func (g *Game[S, T, P]) ValidateFinishTurn(cu *User) (P, error) {
+func (g *Game[S, T, P]) ValidateFinishTurn(ctx *gin.Context, cu *User) (P, SubToken, error) {
+	token, err := getToken(ctx)
+	if err != nil {
+		var zerop P
+		return zerop, token, err
+	}
+
 	cp, err := g.ValidateCurrentPlayer(cu)
 	switch {
 	case err != nil:
-		return nil, err
+		return nil, token, err
 	case !cp.getPerformedAction():
-		return nil, fmt.Errorf("%s has yet to perform an action: %w", cu.Name, ErrValidation)
+		return nil, token, fmt.Errorf("%s has yet to perform an action: %w", cu.Name, ErrValidation)
 	default:
-		return cp, nil
+		return cp, token, nil
 	}
 }
 
@@ -827,7 +834,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 
 	places := g.setFinishOrder(g.Compare)
 	g.getHeader().Status = Completed
-	g.getHeader().EndedAt = time.Now()
+	g.getHeader().EndedAt = timestamppb.Now()
 	g.getHeader().Phase = "Game Over"
 
 	stats, err := cl.getUStats(ctx, g.getHeader().UserIDS...)
@@ -918,7 +925,7 @@ type result struct {
 }
 
 // reflect player order game state to header
-func (g *Game[S, T, P]) updateOrder() {
+func (g *Game[S, T, P]) UpdateOrder() {
 	g.Header.OrderIDS = g.Players.PIDS()
 }
 

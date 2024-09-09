@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/iterator"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Client provides a client for a service
@@ -276,7 +277,7 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) e
 		return err
 	}
 
-	if g.getHeader().UpdatedAt != gc.getHeader().UpdatedAt {
+	if g.getHeader().UpdatedAt.AsTime() != gc.getHeader().UpdatedAt.AsTime() {
 		return fmt.Errorf("unexpected game change")
 	}
 
@@ -301,7 +302,7 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u *User) err
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	g.getHeader().UpdatedAt = time.Now()
+	g.getHeader().UpdatedAt = timestamppb.Now()
 
 	if err := tx.Set(cl.revDocRef(g.getHeader().ID, g.getHeader().Undo.Current), g); err != nil {
 		return err

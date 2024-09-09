@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,7 +33,7 @@ func JErr(ctx *gin.Context, err error) {
 
 	slog.Debug(err.Error())
 	if errors.Is(err, ErrValidation) {
-		ctx.JSON(http.StatusOK, gin.H{"Message": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"Message": strings.TrimSuffix(err.Error(), ": "+ErrValidation.Error())})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"Error": err.Error()})
