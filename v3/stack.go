@@ -98,3 +98,10 @@ func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UI
 	_, err := cl.stackDocRef(gid, uid).Delete(ctx)
 	return err
 }
+
+func (cl *GameClient[GT, G]) txDeleteStack(tx *firestore.Transaction, g G, u *User) error {
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
+
+	return tx.Delete(cl.stackDocRef(g.getHeader().ID, u.ID))
+}

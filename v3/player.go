@@ -41,6 +41,10 @@ func (p *Player) PID() PID {
 	return p.ID
 }
 
+func (p *Player) UIndex() UIndex {
+	return UIndex(p.PID()) - 1
+}
+
 func (p *Player) setPID(pid PID) {
 	if p != nil {
 		p.ID = pid
@@ -73,9 +77,9 @@ func (p *Player) reset() {
 	}
 }
 
-func (p *Player) equal(op *Player) bool {
-	return p != nil && op != nil && p.ID == op.ID
-}
+// func (p *Player) equal(op *Player) bool {
+// 	return p != nil && op != nil && p.ID == op.ID
+// }
 
 type ptr[T any] interface {
 	*T
@@ -124,13 +128,23 @@ func (h Header) UIDFor(pid PID) UID {
 	return h.UserIDS[pid.ToUIndex()]
 }
 
+// PIDFor returns the player id for the user associated with the user id
+// If no user associated with player id, return 0
+func (h Header) PIDFor(uid UID) PID {
+	index, found := h.IndexFor(uid)
+	if !found {
+		return 0
+	}
+	return index.ToPID()
+}
+
 // IndexFor return the user index associated with the user id.
 // Also, returns a boolean indicating whether a user index was found for the user id.
 func (h Header) IndexFor(uid UID) (index UIndex, found bool) {
 	const notFound = -1
 	index = UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
 	if index == notFound {
-		return -1, false
+		return notFound, false
 	}
 	return index, true
 }

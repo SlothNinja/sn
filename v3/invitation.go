@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 
 	"cloud.google.com/go/firestore"
 	"firebase.google.com/go/v4/messaging"
@@ -264,13 +265,17 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.updateSubs(ctx, inv.ID, obj.Token, cu.ID); err != nil {
-			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", obj.Token, err))
+		if _, err := cl.FCM.SubscribeToTopic(ctx, []string{string(obj.Token)}, strconv.Itoa(int(cu.ID))); err != nil {
+			Warnf("attempted to update sub: %q: %v", obj.Token, err)
 		}
 
+		// if err := cl.updateSubs(ctx, inv.ID, obj.Token, cu.ID); err != nil {
+		// 	slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", obj.Token, err))
+		// }
+
 		go func() {
-			notifications := &messaging.MulticastMessage{
-				Tokens: []string{string(obj.Token)},
+			message := &messaging.Message{
+				Topic: strconv.Itoa(int(cu.ID)),
 				Notification: &messaging.Notification{
 					Title:    "You joined game",
 					Body:     "Thanks for joining game.",
@@ -282,16 +287,11 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 					},
 				},
 			}
-			responses, err := cl.FCM.SendEachForMulticast(ctx, notifications)
+			name, err := cl.FCM.Send(ctx, message)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("attempted to send join notifications to: %v: %v", obj.Token, err))
+				Warnf("attempted to send join notifications to: %v: %v", obj.Token, err)
 			}
-			slog.Warn(fmt.Sprintf("batch send responses: %#v", responses))
-			if responses != nil {
-				for _, response := range responses.Responses {
-					slog.Warn(fmt.Sprintf("batch send response: %#v", response.Error))
-				}
-			}
+			Warnf("batch send name: %s", name)
 		}()
 
 		if !start {

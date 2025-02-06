@@ -47,22 +47,22 @@ func deepCopy[T any](obj T) T {
 }
 
 // NewEntry adds a new log entry to the game log
-func (g *Game[S, T, P]) NewEntry(template string, data H, updatedAt *timestamppb.Timestamp) {
-	g.newEntry(template, data, updatedAt)
+func (g *Game[S, T, P]) NewEntry(template string, data H) {
+	g.newEntry(template, data)
 }
 
-func (g *Game[S, T, P]) newEntry(template string, data H, updatedAt *timestamppb.Timestamp) {
-	g.Log = append(g.Log, entry{Template: template, Data: data, UpdatedAt: updatedAt})
+func (g *Game[S, T, P]) newEntry(template string, data H) {
+	g.Log = append(g.Log, entry{Template: template, Data: data, UpdatedAt: timestamppb.Now()})
 }
 
 // UpdateLastEntry updates the last log entry in the game log
-func (g *Game[S, T, P]) UpdateLastEntry(data H, updatedAt *timestamppb.Timestamp) {
+func (g *Game[S, T, P]) UpdateLastEntry(data H) {
 	lastIndex := len(g.Log) - 1
 	if lastIndex < 0 {
 		slog.Warn("no log entry")
 		return
 	}
-	g.Log[lastIndex].UpdatedAt = updatedAt
+	g.Log[lastIndex].UpdatedAt = timestamppb.Now()
 	for k, v := range data {
 		g.Log[lastIndex].Data[k] = v
 	}
