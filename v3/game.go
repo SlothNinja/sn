@@ -3,8 +3,10 @@ package sn
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"slices"
@@ -32,13 +34,17 @@ type Gamer[G any] interface {
 	Viewer[G]
 	Comparer
 
-	getHeader() *Header
+	header() *Header
+	id() string
+	setID(string)
+	stack() *Stack
+	setStack(*Stack)
+	getIndex() *Index
 	isCurrentPlayer(*User) bool
 	newEntry(string, H)
 	playerStats() []*Stats
 	playerUIDS() []UID
 	ptr[G]
-	reset(...PID)
 	getResults([]elo, []elo) results
 	sendEndGameNotifications(results) error
 	setCurrentPlayerers
@@ -79,96 +85,18 @@ func getID(ctx *gin.Context) string {
 }
 
 func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireLogin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		h, err := cl.getHeader(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g, err := cl.getRev(ctx, h.Undo.Current)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g.getHeader().Undo = h.Undo
-
-		// if _, err := cl.stackDocRef(h.ID, cu.ID).Delete(ctx); err != nil {
-		// 	JErr(ctx, err)
-		// 	return
-		// }
-
-		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txDeleteStack(tx, g, cu); err != nil {
-				return err
-			}
-			return cl.txViews(tx, g)
-		}); err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, nil)
-	}
+	return cl.stackHandler((*Stack).reset)
 }
 
 func (cl *GameClient[GT, G]) undoHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireLogin(ctx)
-		if err != nil {
-			Debugf(err.Error())
-		}
-
-		gid := getID(ctx)
-		stack, err := cl.getStack(ctx, gid, cu.ID)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		// do nothing if stack does not change
-		if !stack.Undo() {
-			ctx.JSON(http.StatusOK, nil)
-			return
-		}
-
-		g, err := cl.getRev(ctx, stack.Current)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g.getHeader().Undo = stack
-		g.getHeader().UpdatedAt = timestamppb.Now()
-
-		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSaveStack(tx, g, cu); err != nil {
-				return err
-			}
-			return cl.txViews(tx, g)
-		}); err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, nil)
-	}
+	return cl.stackHandler((*Stack).undo)
 }
 
 func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
+	return cl.stackHandler((*Stack).redo)
+}
+
+func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		Debugf(msgEnter)
 		defer Debugf(msgExit)
@@ -186,43 +114,27 @@ func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
 		}
 
 		// do nothing if stack does not change
-		if !stack.Redo() {
+		if !update(stack) {
 			ctx.JSON(http.StatusOK, nil)
 			return
 		}
 
-		g, err := cl.getRev(ctx, stack.Current)
+		g, err := cl.getGame(ctx, cu, stack.Current)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		g.getHeader().Undo = stack
-		g.getHeader().UpdatedAt = timestamppb.Now()
+		g.setStack(stack)
+		g.header().UpdatedAt = timestamppb.Now()
 
-		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSaveStack(tx, g, cu); err != nil {
-				return err
-			}
-			return cl.txViews(tx, g)
-		}); err != nil {
+		err = cl.saveNoClear(ctx, g, cu)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		ctx.JSON(http.StatusOK, nil)
-		// err = cl.setStack(ctx, gid, cu.ID, stack)
-		// if err != nil {
-		// 	JErr(ctx, err)
-		// 	return
-		// }
-
-		// g, err := cl.getGame(ctx, cu)
-		// if err != nil {
-		// 	JErr(ctx, err)
-		// 	return
-		// }
-		// ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
 	}
 }
 
@@ -237,14 +149,75 @@ func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
 			return
 		}
 
-		g, err := cl.getCommitted(ctx)
+		g, err := cl.getGame(ctx, cu)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		g.getHeader().Status = Abandoned
-		if err := cl.save(ctx, g, cu); err != nil {
+		g.header().Status = Abandoned
+		if err := cl.saveNoClear(ctx, g, cu); err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		msg := fmt.Sprintf("%s has been abandoned.", g.header().Title)
+		ctx.JSON(http.StatusOK, H{"Message": msg})
+	}
+}
+
+func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
+	return cl.rollHandler((*Stack).rollbackward)
+}
+
+func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
+	return cl.rollHandler((*Stack).rollforward)
+}
+
+func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, int) bool) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
+
+		cu, err := cl.RequireAdmin(ctx)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		obj := struct {
+			Rev int
+		}{}
+
+		err = ctx.ShouldBind(&obj)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		gid := getID(ctx)
+		stack, err := cl.getStack(ctx, gid, cu.ID)
+		if err != nil {
+			JErr(ctx, err)
+		}
+
+		// do nothing if stack does not change
+		if !update(stack, obj.Rev) {
+			ctx.JSON(http.StatusOK, nil)
+			return
+		}
+
+		g, err := cl.getGame(ctx, cu, stack.Current)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		g.setStack(stack)
+		g.header().UpdatedAt = timestamppb.Now()
+
+		err = cl.saveNoClear(ctx, g, cu)
+		if err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -253,94 +226,34 @@ func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireAdmin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		obj := struct {
-			Rev int
-		}{}
-
-		err = ctx.ShouldBind(&obj)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		if obj.Rev <= 0 {
-			ctx.JSON(http.StatusOK, nil)
-		}
-
-		g, err := cl.getRev(ctx, obj.Rev-1)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		err = cl.save(ctx, g, cu)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
+// return first item of v, if v as length 1
+// otherwise, returns default value d
+func firstOrDefault[T any](v []T, d T) T {
+	if len(v) == 1 {
+		return v[0]
 	}
+	return d
 }
 
-func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireAdmin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		obj := struct {
-			Rev int
-		}{}
-
-		err = ctx.ShouldBind(&obj)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g, err := cl.getRev(ctx, obj.Rev+1)
-		if status.Code(err) == codes.NotFound {
-			JErr(ctx, fmt.Errorf("cannot roll forward any further: %w", ErrValidation))
-			return
-		}
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		err = cl.save(ctx, g, cu)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, gin.H{"Game": g.ViewFor(cu.ID)})
-	}
-}
-
-func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, rev int) (G, error) {
+// getGame returns game for current, unless a single rev value provide.
+// In which case, getGame returns the requested rev
+func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	id := getID(ctx)
-	snap, err := cl.revDocRef(id, rev).Get(ctx)
+	gid := getID(ctx)
+	stack, err := cl.getStack(ctx, gid, cu.ID)
+
+	switch {
+	case status.Code(err) == codes.NotFound:
+		Warnf("stack not found")
+		stack = new(Stack)
+	case err != nil:
+		return nil, err
+	}
+
+	rv := firstOrDefault(rev, stack.Current)
+	snap, err := cl.revDocRef(gid, rv).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -349,50 +262,10 @@ func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, rev int) (G, error) {
 	if err := snap.DataTo(g); err != nil {
 		return nil, err
 	}
-	g.getHeader().ID = id
-	return g, nil
-}
 
-// func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu User, action ...stackFunc) (G, error) {
-func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	g, err := cl.getCommitted(ctx)
-	if err != nil {
-		return g, err
-	}
-
-	// if current user not current player, then simply return g which is committed game
-	if !g.isCurrentPlayer(cu) {
-		return g, nil
-	}
-
-	gid := getID(ctx)
-	undo, err := cl.getStack(ctx, gid, cu.ID)
-
-	// if undo stack not found, then simply return g which is committed game
-	if status.Code(err) == codes.NotFound {
-		return g, nil
-	}
-	if err != nil {
-		return g, err
-	}
-
-	// cached state same as committed, though undo stack may differ.
-	// thus, replace undo stack and return
-	if undo.Current == undo.Committed {
-		g.getHeader().Undo = undo
-		return g, nil
-	}
-
-	// cached state differs from committed.
-	// thus, get cached state, replace undo stack and return
-	g, err = cl.getRev(ctx, undo.Current)
-	if err != nil {
-		return g, err
-	}
-	g.getHeader().Undo = undo
+	stack.Current = rv
+	g.setStack(stack)
+	g.setID(gid)
 	return g, nil
 }
 
@@ -411,43 +284,43 @@ func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID, crev 
 		return nil, err
 	}
 
-	g.getHeader().ID = id
+	g.setID(id)
 	return g, nil
 }
 
-func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	h, err := cl.getHeader(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	snap, err := cl.revDocRef(h.ID, h.Undo.Current).Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
-		return nil, err
-	}
-
-	g.getHeader().ID = h.ID
-	return g, nil
-}
+// func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
+// 	Debugf(msgEnter)
+// 	defer Debugf(msgExit)
+//
+// 	h, err := cl.getIndex(ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	snap, err := cl.revDocRef(h.id(), h.Undo.Current).Get(ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	g := G(new(GT))
+// 	if err := snap.DataTo(g); err != nil {
+// 		return nil, err
+// 	}
+//
+// 	g.setID(h.id())
+// 	return g, nil
+// }
 
 func (cl *GameClient[GT, G]) txGetCommitted(tx *firestore.Transaction, gid string) (G, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	h, err := cl.txGetHeader(tx, gid)
+	h, err := cl.txGetIndex(tx, gid)
 	if err != nil {
 		return nil, err
 	}
 
-	snap, err := tx.Get(cl.revDocRef(h.ID, h.Undo.Current))
+	snap, err := tx.Get(cl.revDocRef(h.id(), h.Undo.Current))
 	if err != nil {
 		return nil, err
 	}
@@ -457,137 +330,76 @@ func (cl *GameClient[GT, G]) txGetCommitted(tx *firestore.Transaction, gid strin
 		return nil, err
 	}
 
-	g.getHeader().ID = h.ID
+	g.setID(h.id())
 	return g, nil
 }
 
-func (cl *GameClient[GT, G]) txGetHeader(tx *firestore.Transaction, hid string) (Header, error) {
+func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*Index, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	snap, err := tx.Get(cl.indexDocRef(hid))
-	if err != nil {
-		return Header{}, err
-	}
-
-	var h Header
-	if err := snap.DataTo(&h); err != nil {
-		return Header{}, err
-	}
-
-	h.ID = hid
-	return h, nil
-}
-
-func (cl *GameClient[GT, G]) getHeader(ctx *gin.Context) (*Header, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	id := getID(ctx)
-	snap, err := cl.indexDocRef(id).Get(ctx)
+	snap, err := tx.Get(cl.indexDocRef(id))
 	if err != nil {
 		return nil, err
 	}
 
-	h := new(Header)
-	if err := snap.DataTo(h); err != nil {
+	i := new(Index)
+	if err := snap.DataTo(i); err != nil {
 		return nil, err
 	}
 
-	h.ID = id
-	return h, nil
+	i.setID(id)
+	return i, nil
 }
+
+// func (cl *GameClient[GT, G]) getIndex(ctx *gin.Context) (*Index, error) {
+// 	Debugf(msgEnter)
+// 	defer Debugf(msgExit)
+//
+// 	id := getID(ctx)
+// 	snap, err := cl.indexDocRef(id).Get(ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	i := new(Index)
+// 	if err := snap.DataTo(i); err != nil {
+// 		return nil, err
+// 	}
+//
+// 	i.setID(id)
+// 	return i, nil
+// }
 
 func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	g.getHeader().UpdatedAt = timestamppb.Now()
+	g.header().UpdatedAt = timestamppb.Now()
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		if err := cl.txCache(tx, g, u); err != nil {
 			return err
 		}
 
-		if err := tx.Set(cl.revDocRef(g.getHeader().ID, g.getHeader().Undo.Current), g); err != nil {
+		if err := tx.Set(cl.revDocRef(g.id(), g.stack().Current), g); err != nil {
 			return err
 		}
 
-		return tx.Set(cl.stackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
+		return tx.Set(cl.stackDocRef(g.id(), u.ID), g.stack())
 	})
-
-	// err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-	// 	if err := tx.Set(cl.fullyCachedDocRef(g.getHeader().ID, g.getHeader().Undo.Committed, u.ID, g.getHeader().Undo.Current), g); err != nil {
-	// 		return err
-	// 	}
-
-	// 	return tx.Set(cl.cachedDocRef(g.getHeader().ID, g.getHeader().Undo.Committed, u.ID, g.getHeader().Undo.Current), g.ViewFor(u.ID))
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
-	// // Update stackDocRef after caching to ensure clients do not receive stale data
-	// // While a single action, placing in a transaction retries up to default times (5 unless set otherwise).
-	// return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-	// 	return tx.Set(cl.stackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
-	// })
 }
 
-// Result provides a return value associated with performing a cached game action
-type RequestResult struct {
-	Message string
-	Data    H
-}
-
-// RequestActionFunc provides a func type for data requests RequestHandler
-type ActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (RequestResult, error)
-
-// RequestHandler provides a general purpose handler for requesting data
-func (cl *GameClient[GT, G]) RequestHandler(action ActionFunc[GT, G]) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireLogin(ctx)
-		if err != nil {
-			Debugf(err.Error())
-		}
-
-		g, err := cl.getGame(ctx, cu)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		result, err := action(g, ctx, cu)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		if len(result.Message) > 0 {
-			ctx.JSON(http.StatusOK, gin.H{
-				"Message": result.Message,
-				"Data":    result.Data,
-			})
-			return
-		}
-
-		ctx.JSON(http.StatusOK, gin.H{"Data": result.Data})
-	}
-}
-
-// CachedResult provides a return value associated with performing a cached game action
-type CachedResult struct {
+// Result provides a return value associated with performing a game action
+type Result struct {
 	Message string
 }
 
-// CachedActionFunc provides a func type for cached game actions executed by CachedHandler
-type CachedActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (CachedResult, error)
+// ActionFunc provides a func type for game actions executed by CachedHandler or SavedHandler
+type ActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (Result, error)
 
 // CachedHandler provides a general purpose handler for performing cached game actions
-func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.HandlerFunc {
+func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		Debugf(msgEnter)
 		defer Debugf(msgExit)
@@ -608,8 +420,9 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 			JErr(ctx, err)
 			return
 		}
-		g.getHeader().Undo.Update()
+		g.stack().update()
 
+		Debugf("stack: %#v", g.stack())
 		if err := cl.putCached(ctx, g, cu); err != nil {
 			JErr(ctx, err)
 			return
@@ -623,12 +436,42 @@ func (cl *GameClient[GT, G]) CachedHandler(action CachedActionFunc[GT, G]) gin.H
 	}
 }
 
-// type loadType string
-//
-// const (
-// 	revIncLoadType loadType = "rev-inc"
-// 	resetLoadtype  loadType = "reset"
-// )
+// CommitHandler provides a general purpose handler for performing saved game actions
+func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
+
+		cu, err := cl.RequireLogin(ctx)
+		if err != nil {
+			Debugf(err.Error())
+		}
+
+		g, err := cl.getGame(ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		result, err := action(g, ctx, cu)
+		if err != nil {
+			JErr(ctx, err)
+			return
+		}
+		g.stack().update()
+
+		if err := cl.commit(ctx, g, cu); err != nil {
+			JErr(ctx, err)
+			return
+		}
+
+		if len(result.Message) > 0 {
+			ctx.JSON(http.StatusOK, H{"Message": result.Message})
+		}
+
+		ctx.JSON(http.StatusOK, nil)
+	}
+}
 
 // FinishResult provides a return value associated with performing a finish turn action
 type FinishResult struct {
@@ -636,6 +479,7 @@ type FinishResult struct {
 	NextPlayerIDS   []PID
 	Message         string
 	Token           SubToken
+	Data            H
 }
 
 // FinishTurnActionFunc provides a func type for finish turn action executed by FinishTurnHandler
@@ -671,7 +515,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			cl.endGame(ctx, g, cu)
 			return
 		}
-		g.reset(result.NextPlayerIDS...)
+		// g.reset(result.NextPlayerIDS...)
 		notify := g.SetCurrentPlayers(result.NextPlayerIDS...)
 
 		err = cl.commit(ctx, g, cu)
@@ -681,7 +525,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 		}
 
 		go func() {
-			if err := cl.updateSubs(ctx, g.getHeader().ID, result.Token, cu.ID); err != nil {
+			if err := cl.updateSubs(ctx, g.id(), result.Token, cu.ID); err != nil {
 				Warnf("attempted to update sub: %q: %v", result.Token, err)
 			}
 
@@ -706,7 +550,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 func (g *Game[S, T, P]) updateStatsFor(pid PID) {
 	stats := g.statsFor(pid)
 	stats.Moves++
-	stats.Think += time.Since(g.getHeader().UpdatedAt.AsTime())
+	stats.Think += time.Since(g.header().UpdatedAt.AsTime())
 }
 
 func (g *Game[S, T, P]) playerUIDS() []UID {
@@ -715,7 +559,10 @@ func (g *Game[S, T, P]) playerUIDS() []UID {
 
 // UIDForPID returns the player id associated with the user id
 func (g *Game[S, T, P]) UIDForPID(pid PID) UID {
-	return g.Header.UserIDS[pid.ToUIndex()]
+	if i := int(pid.ToUIndex()); i > 0 && i < len(g.Header.UserIDS)-1 {
+		return g.Header.UserIDS[i]
+	}
+	return noUID
 }
 
 // PlayerByPID returns the player associated with the player id
@@ -814,6 +661,10 @@ func (g *Game[S, T, P]) CurrentPlayerFor(u *User) (P, bool) {
 
 	const notFound = -1
 	if index == notFound {
+		Debugf("u: %#v", u)
+		if u.Admin && u.GodMode && len(ps) == 1 {
+			return ps[0], true
+		}
 		return zerop, false
 	}
 
@@ -889,6 +740,8 @@ func (g *Game[S, T, P]) ValidateFinishTurn(ctx *gin.Context, cu *User) (P, SubTo
 		return nil, token, err
 	case !cp.getPerformedAction():
 		return nil, token, fmt.Errorf("%s has yet to perform an action: %w", cu.Name, ErrValidation)
+	case !cp.getCanFinish():
+		return nil, token, fmt.Errorf("%s has performed an action, but has taken partial actions preventing a turn finish: %w", cu.Name, ErrValidation)
 	default:
 		return cp, token, nil
 	}
@@ -907,15 +760,15 @@ func (g *Game[S, T, P]) statsFor(pid PID) *Stats {
 	return p.getStats()
 }
 
-func (g *Game[S, T, P]) reset(pids ...PID) {
-	var zerop P
-	for _, pid := range pids {
-		p := g.PlayerByPID(pid)
-		if p != zerop {
-			p.reset()
-		}
-	}
-}
+// func (g *Game[S, T, P]) reset(pids ...PID) {
+// 	var zerop P
+// 	for _, pid := range pids {
+// 		p := g.PlayerByPID(pid)
+// 		if p != zerop {
+// 			p.Reset()
+// 		}
+// 	}
+// }
 
 type uidsForPidser interface {
 	UIDSForPIDS([]PID) []UID
@@ -953,18 +806,18 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	defer Debugf(msgExit)
 
 	places := g.setFinishOrder(g.Compare)
-	g.getHeader().Status = Completed
-	g.getHeader().EndedAt = timestamppb.Now()
-	g.getHeader().Phase = "Game Over"
+	g.header().Status = Completed
+	g.header().EndedAt = timestamppb.Now()
+	g.header().Phase = "Game Over"
 
-	stats, err := cl.getUStats(ctx, g.getHeader().UserIDS...)
+	stats, err := cl.getUStats(ctx, g.header().UserIDS...)
 	if err != nil {
 		JErr(ctx, err)
 		return
 	}
 	stats = g.updateUStats(stats, g.playerStats(), g.playerUIDS())
 
-	oldElos, newElos, err := cl.updateElo(ctx, g.getHeader().Users(), places)
+	oldElos, newElos, err := cl.updateElo(ctx, g.header().Users(), places)
 	if err != nil {
 		JErr(ctx, err)
 		return
@@ -1133,6 +986,7 @@ func endGameTemplate() (*template.Template, error) {
 }
 
 func (g *Game[S, T, P]) winnerNames() []string {
+	Debugf("WinnerIDS: %#v", g.Header.WinnerIDS)
 	return pie.Map(g.Header.WinnerIDS, func(uid UID) string { return g.Header.NameFor(g.PlayerByUID(uid).PID()) })
 }
 
@@ -1180,6 +1034,50 @@ func (g *Game[S, T, P]) ViewFor(_ UID) *Game[S, T, P] {
 	return g.DeepCopy()
 }
 
-func (g *Game[S, T, P]) getHeader() *Header {
+// DeepCopy provides a deep copy of the game
+func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
+	return deepCopy(g)
+}
+
+func deepCopy[T any](obj T) T {
+	v, err := json.Marshal(obj)
+	if err != nil {
+		slog.Error("unable to marshal object: %v", err)
+		panic("unable to marshal object")
+	}
+
+	var obj2 T
+	err = json.Unmarshal(v, &obj2)
+	if err != nil {
+		slog.Error("unable to unmarshal object: %v", err)
+		panic("unable to unmarshal object")
+	}
+	return obj2
+}
+
+func (g *Game[S, T, P]) header() *Header {
 	return &(g.Header)
+}
+
+func (g *Game[S, T, P]) id() string {
+	return g.header().id()
+}
+
+func (g *Game[S, T, P]) setID(id string) {
+	g.header().setID(id)
+}
+
+func (g *Game[S, T, P]) stack() *Stack {
+	return &(g.header().Undo)
+}
+
+func (g *Game[S, T, P]) setStack(s *Stack) {
+	g.header().Undo = *s
+}
+
+func (g *Game[S, T, P]) getIndex() *Index {
+	return &Index{
+		Header: *(g.header()),
+		Rev:    g.stack().Committed,
+	}
 }

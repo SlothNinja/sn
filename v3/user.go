@@ -27,6 +27,7 @@ type userData struct {
 	XMPPNotifications  bool
 	GravType           string
 	Admin              bool
+	GodMode            bool `datastore:"-"`
 	Joined             time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -60,12 +61,50 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 	}
 }
 
+func (cl *Client) updateGodModeHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		slog.Debug(msgEnter)
+		defer slog.Debug(msgExit)
+
+		token := cl.GetSessionToken(ctx)
+		if token == nil {
+			ctx.JSON(http.StatusOK, gin.H{"Error": ErrNotLoggedIn})
+			return
+		}
+
+		if !token.Data.Admin {
+			ctx.JSON(http.StatusOK, gin.H{"Error": ErrNotAdmin})
+			return
+		}
+
+		obj := new(struct {
+			GodMode bool
+		})
+
+		if err := ctx.ShouldBind(obj); err != nil {
+			ctx.JSON(http.StatusOK, gin.H{"Error": err})
+			return
+		}
+
+		token.Data.GodMode = obj.GodMode
+		cl.setSessionToken(ctx, token)
+
+		if err := cl.SaveSession(ctx); err != nil {
+			ctx.JSON(http.StatusOK, gin.H{"Error": err})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"CU": token.ToUser()})
+	}
+}
+
 func getFSTokenKey() string {
 	return os.Getenv("FS_TOKEN_KEY")
 }
 
 // UID represent a unique id of a user
 type UID int64
+
+const noUID UID = 0
 
 func getUID(ctx *gin.Context, param string) (UID, error) {
 	id, err := strconv.ParseInt(ctx.Param(param), 10, 64)

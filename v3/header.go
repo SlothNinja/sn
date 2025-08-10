@@ -35,7 +35,7 @@ type Header struct {
 	CPIDS                     []PID
 	WinnerIDS                 []UID
 	Status                    Status
-	Undo                      Stack
+	Undo                      Stack `firestore:"-"`
 	OptString                 string
 	StartedAt                 *timestamppb.Timestamp
 	EndedAt                   *timestamppb.Timestamp
@@ -44,7 +44,7 @@ type Header struct {
 	Private                   bool
 }
 
-func (h Header) Users() []*User {
+func (h *Header) Users() []*User {
 	us := make([]*User, len(h.UserIDS))
 	for i := range us {
 		us[i] = &User{
@@ -60,4 +60,21 @@ func (h Header) Users() []*User {
 	}
 	slog.Debug(fmt.Sprintf("Users: %#v", us))
 	return us
+}
+
+func (h *Header) stack() *Stack {
+	return &(h.Undo)
+}
+
+type Index struct {
+	Header
+	Rev int
+}
+
+func (h *Header) id() string {
+	return h.ID
+}
+
+func (h *Header) setID(id string) {
+	h.ID = id
 }

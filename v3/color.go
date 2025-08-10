@@ -31,10 +31,3 @@ const (
 	// NoColor represents no, missing, or zero value of color
 	NoColor Color = ""
 )
-
-var textColor = map[Color]Color{Red: White, Yellow: Black, Purple: White, Black: White, Brown: White}
-
-// TextColorFor returns Black or White foreground text color for provided background color
-func TextColorFor(background Color) Color {
-	return textColor[background]
-}

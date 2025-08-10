@@ -13,7 +13,9 @@ type Player struct {
 	ID              PID
 	Passed          bool
 	PerformedAction bool
+	CanFinish       bool
 	Colors          []Color
+	Log             *entry
 	Stats
 }
 
@@ -59,8 +61,16 @@ func (p *Player) getScore() int64 {
 	return p.Score
 }
 
+func (p *Player) setLog(e *entry) {
+	p.Log = e
+}
+
 func (p *Player) getPerformedAction() bool {
 	return p.PerformedAction
+}
+
+func (p *Player) getCanFinish() bool {
+	return p.CanFinish
 }
 
 func (p *Player) getStats() *Stats {
@@ -70,11 +80,18 @@ func (p *Player) getStats() *Stats {
 	return &(p.Stats)
 }
 
-func (p *Player) reset() {
-	if p != nil {
-		p.PerformedAction = false
-		p.Passed = false
-	}
+// Clear sets PerformedAction and CanFinish to false
+// Clear panics if p == nil
+func (p *Player) Clear() {
+	p.PerformedAction = false
+	p.CanFinish = false
+}
+
+// Reset clears player via Clear() and sets Passed to false
+// Reset panics if p == nil
+func (p *Player) Reset() {
+	p.Clear()
+	p.Passed = false
 }
 
 // func (p *Player) equal(op *Player) bool {
@@ -87,13 +104,16 @@ type ptr[T any] interface {
 
 type playerer[T any] interface {
 	PID() PID
+	Reset()
+	Clear()
 
 	ptr[T]
 	setPID(PID)
 	getPerformedAction() bool
+	getCanFinish() bool
 	getStats() *Stats
 	getScore() int64
-	reset()
+	setLog(*entry)
 }
 
 // Players represents players of the game

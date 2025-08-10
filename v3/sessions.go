@@ -49,18 +49,6 @@ func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
 	return token.ID, nil
 }
 
-func (cl *Client) getCU(ctx *gin.Context) (*User, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
-
-	token := cl.GetSessionToken(ctx)
-	if token == nil {
-		return nil, ErrNotLoggedIn
-	}
-
-	return token.ToUser(), nil
-}
-
 // ToUser returns a user from the session token
 func (s *SessionToken) ToUser() *User {
 	return &User{ID: s.ID, userData: s.Data}
@@ -78,6 +66,18 @@ type SessionToken struct {
 }
 
 // SetSessionToken creates and stores a new session token for user and its associated subscription
+func (cl *Client) setSessionToken(ctx *gin.Context, t *SessionToken) {
+	slog.Debug(msgEnter)
+	defer slog.Debug(msgExit)
+
+	if t == nil {
+		return
+	}
+
+	cl.Session(ctx).Set("session", t)
+}
+
+// SetSessionToken creates and stores a new session token for user and its associated subscription
 func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
@@ -86,7 +86,7 @@ func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
 		return
 	}
 
-	cl.Session(ctx).Set("session", tokenFrom(u, sub))
+	cl.setSessionToken(ctx, tokenFrom(u, sub))
 }
 
 // GetSessionToken returns session token for user and its associated subscription

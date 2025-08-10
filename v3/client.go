@@ -3,6 +3,7 @@ package sn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -107,7 +108,7 @@ func NewGameClient[GT any, G Gamer[GT]](ctx context.Context, opts ...Option) *Ga
 	return cl.addRoutes(cl.prefix)
 }
 
-// AddRoutes addes routing for game.
+// AddRoutes adds routing for game.
 func (cl *Client) addRoutes() *Client {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
@@ -116,13 +117,17 @@ func (cl *Client) addRoutes() *Client {
 	// Current User
 	cl.Router.GET(cl.prefix+"/user/current", cl.cuHandler())
 
+	/////////////////////////////////////////////
+	// Update God Mode
+	cl.Router.PUT(cl.prefix+"/user/update-god-mode", cl.updateGodModeHandler())
+
 	// warmup
 	cl.Router.GET("_ah/warmup", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
 
 	return cl
 }
 
-// AddRoutes addes routing for game.
+// AddRoutes adds routing for game.
 func (cl *GameClient[GT, G]) addRoutes(prefix string) *GameClient[GT, G] {
 	////////////////////////////////////////////
 	// Invitation Group
@@ -261,7 +266,7 @@ func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	g.getHeader().UpdatedAt = timestamppb.Now()
+	g.header().UpdatedAt = timestamppb.Now()
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 		return cl.txCommit(tx, g, u)
@@ -272,26 +277,26 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) e
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	g.getHeader().Undo.Commit()
+	g.stack().commit()
 
-	h, err := cl.txGetHeader(tx, g.getHeader().ID)
+	i, err := cl.txGetIndex(tx, g.id())
 	if err != nil {
 		return err
 	}
 
-	if h.Undo.Committed+1 != g.getHeader().Undo.Committed {
+	if i.Rev+1 != g.stack().Committed {
 		return fmt.Errorf("unexpected game change")
 	}
 
 	return cl.txSave(tx, g, u)
 }
 
-func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G, u *User) error {
+func (cl *GameClient[GT, G]) saveNoClear(ctx *gin.Context, g G, u *User) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txSave(tx, g, u)
+		return cl.txSaveNoClear(tx, g, u)
 	})
 }
 
@@ -299,33 +304,33 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u *User) err
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := cl.txDeleteStack(tx, g, u); err != nil {
-		return err
-	}
-
 	if err := cl.txClearCache(tx, g, u); err != nil {
 		return err
 	}
+
+	return cl.txSaveNoClear(tx, g, u)
+}
+
+func (cl *GameClient[GT, G]) txSaveNoClear(tx *firestore.Transaction, g G, u *User) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if err := cl.txCache(tx, g, u); err != nil {
 		return err
 	}
 
-	return tx.Set(cl.indexDocRef(g.getHeader().ID), g.getHeader())
-}
-
-func (cl *GameClient[GT, G]) txSaveHeader(tx *firestore.Transaction, g G, u *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	return tx.Set(cl.indexDocRef(g.getHeader().ID), g.getHeader())
+	return tx.Set(cl.indexDocRef(g.id()), g.getIndex())
 }
 
 func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G, u *User) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := tx.Set(cl.revDocRef(g.getHeader().ID, g.getHeader().Undo.Current), g); err != nil {
+	if err := tx.Set(cl.revDocRef(g.id(), g.stack().Current), g); err != nil {
+		return err
+	}
+
+	if err := tx.Set(cl.stackDocRef(g.id(), noUID), g.stack()); err != nil {
 		return err
 	}
 
@@ -334,23 +339,31 @@ func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G, u *User) er
 	// sent to browsers.
 	uids, views := g.Views()
 	for i, v := range views {
-		if err := tx.Set(cl.cuViewDocRef(g.getHeader().ID, uids[i]), v); err != nil {
+		if err := tx.Set(cl.cuViewDocRef(g.id(), uids[i]), v); err != nil {
+			return err
+		}
+		if err := tx.Set(cl.stackDocRef(g.id(), uids[i]), g.stack()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// attempts to remove two revs passed current save
-// tx.Delete generates no error when deleting a non-existent document
-// may leave 'cache' items behind, but two should provide sufficent buffer to prevent
-// accidently rolling forward to a stale state.
+// attempts to remove revs passed current save
 func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G, u *User) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
-	if err := tx.Delete(cl.revDocRef(g.getHeader().ID, g.getHeader().Undo.Current+1)); err != nil {
+	var err error
+	for i := g.stack().Current + 1; i <= g.stack().UpdateEnd; i++ {
+		err = errors.Join(err, tx.Delete(cl.revDocRef(g.id(), i)))
+	}
+
+	if err != nil {
 		return err
 	}
-	return tx.Delete(cl.revDocRef(g.getHeader().ID, g.getHeader().Undo.Current+2))
+	g.stack().UpdateEnd = g.stack().Committed
+	return nil
 }
 
 // By implementing Views interface, game may provide a customized view for each user.
@@ -362,7 +375,7 @@ func (cl *GameClient[GT, G]) txViews(tx *firestore.Transaction, g G) error {
 
 	uids, views := g.Views()
 	for i, v := range views {
-		if err := tx.Set(cl.cuViewDocRef(g.getHeader().ID, uids[i]), v); err != nil {
+		if err := tx.Set(cl.cuViewDocRef(g.id(), uids[i]), v); err != nil {
 			return err
 		}
 	}
@@ -373,45 +386,8 @@ func (cl *GameClient[GT, G]) txSaveStack(tx *firestore.Transaction, g G, u *User
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	return tx.Set(cl.stackDocRef(g.getHeader().ID, u.ID), g.getHeader().Undo)
+	return tx.Set(cl.stackDocRef(g.id(), u.ID), g.stack())
 }
-
-// func (cl *GameClient[GT, G]) clearCached(ctx context.Context, gid string, rev int, uid UID) error {
-// 	Debugf(msgEnter)
-// 	defer Debugf(msgExit)
-//
-// 	refs := cl.cachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
-// 	for {
-// 		ref, err := refs.Next()
-// 		if err == iterator.Done {
-// 			break
-// 		}
-// 		if err != nil {
-// 			return err
-// 		}
-//
-// 		if _, err := ref.Delete(ctx); err != nil {
-// 			return err
-// 		}
-// 	}
-//
-// 	refs = cl.fullyCachedCollectionRef(gid, rev, uid).DocumentRefs(ctx)
-// 	for {
-// 		ref, err := refs.Next()
-// 		if err == iterator.Done {
-// 			break
-// 		}
-// 		if err != nil {
-// 			return err
-// 		}
-//
-// 		if _, err := ref.Delete(ctx); err != nil {
-// 			return err
-// 		}
-// 	}
-//
-// 	return cl.deleteStack(ctx, gid, uid)
-// }
 
 func docRefFor(ref *firestore.DocumentRef, uid UID) bool {
 	ss := pie.Reverse(strings.Split(ref.ID, "-"))

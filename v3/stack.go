@@ -2,8 +2,8 @@ package sn
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"strconv"
 
 	"cloud.google.com/go/firestore"
 )
@@ -13,10 +13,12 @@ type Stack struct {
 	Current   int
 	Updated   int
 	Committed int
+	UpdateEnd int
+	CommitEnd int
 }
 
-// Undo updates stack to undo an action
-func (s *Stack) Undo() bool {
+// undo updates stack to undo an action
+func (s *Stack) undo() bool {
 	undo := s.Current > s.Committed
 	if undo {
 		s.Current--
@@ -24,14 +26,15 @@ func (s *Stack) Undo() bool {
 	return undo
 }
 
-// Update updates the stack for an action
-func (s *Stack) Update() {
+// update updates the stack for an action
+func (s *Stack) update() {
 	s.Current++
 	s.Updated = s.Current
+	s.UpdateEnd = max(s.UpdateEnd, s.Updated)
 }
 
-// Reset resets the stack to the last committed action
-func (s *Stack) Reset() bool {
+// reset resets the stack to the last committed action
+func (s *Stack) reset() bool {
 	reset := s.Current != s.Committed || s.Updated != s.Current
 	if reset {
 		s.Current, s.Updated = s.Committed, s.Committed
@@ -39,8 +42,8 @@ func (s *Stack) Reset() bool {
 	return reset
 }
 
-// Redo moves the undo stack forward
-func (s *Stack) Redo() bool {
+// redo moves the undo stack forward
+func (s *Stack) redo() bool {
 	redo := s.Updated > s.Committed && s.Current < s.Updated
 	if redo {
 		s.Current++
@@ -48,10 +51,34 @@ func (s *Stack) Redo() bool {
 	return redo
 }
 
-// Commit commits an action to the stack
-func (s *Stack) Commit() {
+// commit commits an action to the stack
+func (s *Stack) commit() {
 	s.Committed++
 	s.Current, s.Updated = s.Committed, s.Committed
+	s.UpdateEnd = max(s.UpdateEnd, s.Committed)
+	s.CommitEnd = max(s.CommitEnd, s.Committed)
+}
+
+// rollbackward rolls the stack backward to rev
+// returns true if rolling back to rev was possible
+// otherwise returns false and does not update stack
+func (s *Stack) rollbackward(rev int) bool {
+	rollbackward := s.Current == s.Committed && s.Committed > 0 && rev >= 0 && rev < s.Current
+	if rollbackward {
+		s.Current, s.Updated, s.Committed = rev, rev, rev
+	}
+	return rollbackward
+}
+
+// Rollbackward rolls the stack forward to rev
+// returns true if rolling forward to rev was possible
+// otherwise returns false and does not update stack
+func (s *Stack) rollforward(rev int) bool {
+	rollforward := s.Current == s.Committed && s.Committed < s.CommitEnd && rev <= s.CommitEnd && rev > s.Current
+	if rollforward {
+		s.Current, s.Updated, s.Committed = rev, rev, rev
+	}
+	return rollforward
 }
 
 func (cl *GameClient[GT, G]) stackCollectionRef() *firestore.CollectionRef {
@@ -59,49 +86,23 @@ func (cl *GameClient[GT, G]) stackCollectionRef() *firestore.CollectionRef {
 }
 
 func (cl *GameClient[GT, G]) stackDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.stackCollectionRef().Doc(gid).Collection("For").Doc(fmt.Sprintf("%d", uid))
+	return cl.stackCollectionRef().Doc(gid).Collection("For").Doc(strconv.Itoa(int(uid)))
 }
 
-func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (Stack, error) {
+func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (*Stack, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
 	snap, err := cl.stackDocRef(gid, uid).Get(ctx)
 	if err != nil {
-		return Stack{}, err
+		return nil, err
 	}
 
-	var stack Stack
-	err = snap.DataTo(&stack)
+	stack := new(Stack)
+	err = snap.DataTo(stack)
 	if err != nil {
-		return Stack{}, err
+		return nil, err
 	}
 
-	return stack, err
-}
-
-func (cl *GameClient[GT, G]) setStack(ctx context.Context, gid string, uid UID, s Stack) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
-
-	_, err := cl.stackDocRef(gid, uid).Set(ctx, &s)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (cl *GameClient[GT, G]) deleteStack(ctx context.Context, gid string, uid UID) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
-
-	_, err := cl.stackDocRef(gid, uid).Delete(ctx)
-	return err
-}
-
-func (cl *GameClient[GT, G]) txDeleteStack(tx *firestore.Transaction, g G, u *User) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
-
-	return tx.Delete(cl.stackDocRef(g.getHeader().ID, u.ID))
+	return stack, nil
 }

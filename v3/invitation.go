@@ -51,7 +51,7 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 		now := timestamppb.Now()
 		inv.UpdatedAt = now
 		inv.EndedAt = now
-		if _, err := cl.invitationDocRef(inv.ID).Set(ctx, inv); err != nil {
+		if _, err := cl.invitationDocRef(inv.id()).Set(ctx, inv); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -76,7 +76,7 @@ func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error)
 		return inv, err
 	}
 
-	inv.ID = id
+	inv.setID(id)
 	return inv, nil
 }
 
@@ -136,7 +136,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 		slog.Debug(msgEnter)
 		defer slog.Debug(msgExit)
 
-		cu, err := cl.getCU(ctx)
+		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -156,10 +156,10 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 			if err := tx.Create(ref, inv); err != nil {
 				return err
 			}
-			inv.ID = ref.ID
+			inv.setID(ref.ID)
 
 			if len(hash) > 0 {
-				return tx.Create(cl.hashDocRef(inv.ID), gin.H{"Hash": hash})
+				return tx.Create(cl.hashDocRef(inv.id()), gin.H{"Hash": hash})
 			}
 			return nil
 		}); err != nil {
@@ -167,7 +167,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.updateSubs(ctx, inv.ID, token, cu.ID); err != nil {
+		if err := cl.updateSubs(ctx, inv.id(), token, cu.ID); err != nil {
 			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", token, err))
 		}
 
@@ -241,7 +241,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 		var hash []byte
 		if inv.Private {
-			hash, err = cl.getHash(ctx, inv.ID)
+			hash, err = cl.getHash(ctx, inv.id())
 			if err != nil {
 				JErr(ctx, err)
 				return
@@ -296,7 +296,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 		if !start {
 			inv.UpdatedAt = timestamppb.Now()
-			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
+			_, err = cl.invitationDocRef(inv.id()).Set(ctx, inv)
 			if err != nil {
 				JErr(ctx, err)
 				return
@@ -313,19 +313,19 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(tx, g, cu); err != nil {
+			if err := cl.txSaveNoClear(tx, g, cu); err != nil {
 				return err
 			}
-			return cl.txDeleteInvitation(tx, inv.ID)
+			return cl.txDeleteInvitation(tx, inv.id())
 		}); err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		go func() {
-			responses, err := cl.sendNotifications(ctx, g, g.getHeader().CPIDS)
+			responses, err := cl.sendNotifications(ctx, g, g.header().CPIDS)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("attempted to send notifications to: %v: %v", g.getHeader().CPIDS, err))
+				slog.Warn(fmt.Sprintf("attempted to send notifications to: %v: %v", g.header().CPIDS, err))
 			}
 			slog.Warn(fmt.Sprintf("batch send response: %v", responses))
 		}()
@@ -407,9 +407,9 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 
 		if len(inv.UserIDS) != 0 {
 			inv.UpdatedAt = timestamppb.Now()
-			_, err = cl.invitationDocRef(inv.ID).Set(ctx, inv)
+			_, err = cl.invitationDocRef(inv.id()).Set(ctx, inv)
 		} else {
-			err = cl.deleteInvitation(ctx, inv.ID)
+			err = cl.deleteInvitation(ctx, inv.id())
 		}
 
 		if err != nil {
@@ -417,7 +417,7 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 			return
 		}
 
-		if err := cl.removeSubs(ctx, inv.ID, cu.ID); err != nil {
+		if err := cl.removeSubs(ctx, inv.id(), cu.ID); err != nil {
 			slog.Warn(fmt.Sprintf("error removing subs for %v: %v", cu.ID, err))
 		}
 

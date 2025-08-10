@@ -20,11 +20,12 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	cu, err := cl.getCU(ctx)
-	if err != nil {
-		return nil, err
+	token := cl.GetSessionToken(ctx)
+	if token == nil {
+		return nil, ErrNotLoggedIn
 	}
-	return cu, nil
+
+	return token.ToUser(), nil
 }
 
 // RequireAdmin returns the logged in user if user is admin

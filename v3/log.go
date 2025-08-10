@@ -14,12 +14,9 @@ import (
 
 func init() {
 	if IsProduction() {
-		//slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, optsProd)))
 		slog.SetDefault(stackLogger())
 		return
 	}
-
-	//slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, optsDev)))
 	slog.SetDefault(prettyLogger())
 }
 
@@ -27,12 +24,6 @@ const (
 	msgEnter = "Entering"
 	msgExit  = "Exiting"
 )
-
-// var optsProd = &slog.HandlerOptions{
-// 	AddSource:   true,
-// 	Level:       getLogLevel(),
-// 	ReplaceAttr: replaceProd,
-// }
 
 func prettyLogger() *slog.Logger {
 	return slog.New(prettylog.NewHandler(&slog.HandlerOptions{
@@ -48,36 +39,6 @@ func stackLogger() *slog.Logger {
 		AddSource: true,
 	}))
 }
-
-// func replaceProd(groups []string, a slog.Attr) slog.Attr {
-// 	switch a.Key {
-// 	case slog.LevelKey:
-// 		a.Key = "severity"
-// 	case slog.MessageKey:
-// 		a.Key = "message"
-// 	}
-// 	return a
-// }
-
-// var optsDev = &slog.HandlerOptions{
-// 	AddSource:   true,
-// 	Level:       getLogLevel(),
-// 	ReplaceAttr: replaceDev,
-// }
-//
-// func replaceDev(groups []string, a slog.Attr) slog.Attr {
-// 	// Remove time.
-// 	if a.Key == slog.TimeKey && len(groups) == 0 {
-// 		return slog.Attr{}
-// 	}
-// 	// Remove the directory from the source's filename.
-// 	if a.Key == slog.SourceKey {
-// 		source := a.Value.Any().(*slog.Source)
-// 		dir, file := filepath.Split(source.File)
-// 		source.File = fmt.Sprintf("%s() %s/%s", pie.Last(strings.Split(source.Function, ".")), filepath.Base(dir), file)
-// 	}
-// 	return a
-// }
 
 func getPrettyLogLevel() slog.Level {
 	s, found := os.LookupEnv("LOGLEVEL")

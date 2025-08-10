@@ -35,7 +35,11 @@ func (cl *GameClient[GT, G]) sendNotifications(ctx context.Context, g G, pids []
 	slog.Debug(msgEnter)
 	defer slog.Debug(msgExit)
 
-	tokens, err := cl.getTokenStrings(ctx, g.getHeader().ID, g.UIDSForPIDS(pids))
+	if len(pids) == 0 {
+		return nil, nil
+	}
+
+	tokens, err := cl.getTokenStrings(ctx, g.id(), g.UIDSForPIDS(pids))
 	if err != nil {
 		return nil, err
 	}
