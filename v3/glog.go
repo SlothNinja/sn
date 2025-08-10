@@ -54,6 +54,7 @@ func (g *Game[S, T, P]) UpdateLastEntry(data H) {
 	maps.Insert(e.Data, maps.All(data))
 }
 
+// UpdateLastEntryFor updates the last log entry in the game log and player log
 func (g *Game[S, T, P]) UpdateLastEntryFor(p P, data H) {
 	g.UpdateLastEntry(data)
 	p.setLog(g.lastEntry())
@@ -81,16 +82,19 @@ func (g *Game[S, T, P]) UpdateLastSubEntry(data H) {
 	maps.Insert(sub.Data, maps.All(data))
 }
 
+// UpdateLastSubEntryFor updates the last sub entry in the game log and player log
 func (g *Game[S, T, P]) UpdateLastSubEntryFor(p P, data H) {
 	g.UpdateLastSubEntry(data)
 	p.setLog(g.lastEntry())
 }
 
+// IsLastEntryFor returns whethet last entry in game log is of a certain template and for a certain player.
 func (g *Game[S, T, P]) IsLastEntryFor(template string, p P) bool {
 	e := g.lastEntry()
 	return e.Template == template && e.Data["PID"] == p.PID()
 }
 
+// NewEntryDemoteLastFor demotes last entry in game log and player log to a subentry of the newly-add log entry.
 func (g *Game[S, T, P]) NewEntryDemoteLastFor(p P, template string, data H) {
 	e := g.lastEntry()
 	subTemplate := e.Template

@@ -269,10 +269,6 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			Warnf("attempted to update sub: %q: %v", obj.Token, err)
 		}
 
-		// if err := cl.updateSubs(ctx, inv.ID, obj.Token, cu.ID); err != nil {
-		// 	slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", obj.Token, err))
-		// }
-
 		go func() {
 			message := &messaging.Message{
 				Topic: strconv.Itoa(int(cu.ID)),
@@ -313,7 +309,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSaveNoClear(tx, g, cu); err != nil {
+			if err := cl.txSaveNoClear(tx, g); err != nil {
 				return err
 			}
 			return cl.txDeleteInvitation(tx, inv.id())
@@ -521,8 +517,8 @@ func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 		uids := make([]UID, len(inv.UserIDS))
 		copy(uids, inv.UserIDS)
 
-		us := make([]*User, len(inv.Users()))
-		copy(us, inv.Users())
+		us := make([]*User, len(inv.users()))
+		copy(us, inv.users())
 
 		if hasUID := pie.Any(inv.UserIDS, func(id UID) bool { return id == cu.ID }); !hasUID {
 			uids = append(uids, cu.ID)

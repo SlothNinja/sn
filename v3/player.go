@@ -43,6 +43,7 @@ func (p *Player) PID() PID {
 	return p.ID
 }
 
+// UIndex returns the UIndex (user index) associated with the Player
 func (p *Player) UIndex() UIndex {
 	return UIndex(p.PID()) - 1
 }
@@ -195,36 +196,3 @@ func (g *Game[S, T, P]) sortPlayers(compare func(PID, PID) int) {
 func (g *Game[S, T, P]) Compare(pid1, pid2 PID) int {
 	return cmp.Compare(g.PlayerByPID(pid2).getScore(), g.PlayerByPID(pid1).getScore())
 }
-
-// func diff[T any](ss []T, against []T, equal func(T, T) bool) (added, removed []T) {
-// 	// This is probably not the best way to do it. We do an O(n^2) between the
-// 	// slices to see which items are missing in each direction.
-//
-// 	diffOneWay := func(ss1, ss2raw []T) (result []T) {
-// 		ss2 := make([]T, len(ss2raw))
-// 		copy(ss2, ss2raw)
-//
-// 		for _, s := range ss1 {
-// 			found := false
-//
-// 			for i, element := range ss2 {
-// 				if equal(s, element) {
-// 					ss2 = append(ss2[:i], ss2[i+1:]...)
-// 					found = true
-// 					break
-// 				}
-// 			}
-//
-// 			if !found {
-// 				result = append(result, s)
-// 			}
-// 		}
-//
-// 		return
-// 	}
-//
-// 	removed = diffOneWay(ss, against)
-// 	added = diffOneWay(against, ss)
-//
-// 	return
-// }

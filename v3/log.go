@@ -75,6 +75,11 @@ func Warnf(format string, args ...any) {
 	logf(slog.LevelWarn, format, args...)
 }
 
+// Errorf provides formatted debug messages
+func Errorf(format string, args ...any) {
+	logf(slog.LevelError, format, args...)
+}
+
 func logf(level slog.Level, format string, args ...any) {
 	logger := slog.Default()
 	if !logger.Enabled(context.Background(), slog.LevelDebug) {

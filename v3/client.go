@@ -262,18 +262,18 @@ func (cl *GameClient[GT, G]) Close() error {
 	return cl.Client.Close()
 }
 
-func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, u *User) error {
+func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	g.header().UpdatedAt = timestamppb.Now()
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txCommit(tx, g, u)
+		return cl.txCommit(tx, g)
 	})
 }
 
-func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -288,41 +288,41 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, u *User) e
 		return fmt.Errorf("unexpected game change")
 	}
 
-	return cl.txSave(tx, g, u)
+	return cl.txSave(tx, g)
 }
 
-func (cl *GameClient[GT, G]) saveNoClear(ctx *gin.Context, g G, u *User) error {
+func (cl *GameClient[GT, G]) saveNoClear(ctx *gin.Context, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txSaveNoClear(tx, g, u)
+		return cl.txSaveNoClear(tx, g)
 	})
 }
 
-func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := cl.txClearCache(tx, g, u); err != nil {
+	if err := cl.txClearCache(tx, g); err != nil {
 		return err
 	}
 
-	return cl.txSaveNoClear(tx, g, u)
+	return cl.txSaveNoClear(tx, g)
 }
 
-func (cl *GameClient[GT, G]) txSaveNoClear(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txSaveNoClear(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := cl.txCache(tx, g, u); err != nil {
+	if err := cl.txCache(tx, g); err != nil {
 		return err
 	}
 
 	return tx.Set(cl.indexDocRef(g.id()), g.getIndex())
 }
 
-func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -350,7 +350,7 @@ func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G, u *User) er
 }
 
 // attempts to remove revs passed current save
-func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 

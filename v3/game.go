@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log/slog"
 	"math/rand"
 	"net/http"
 	"slices"
@@ -39,7 +38,7 @@ type Gamer[G any] interface {
 	setID(string)
 	stack() *Stack
 	setStack(*Stack)
-	getIndex() *Index
+	getIndex() *index
 	isCurrentPlayer(*User) bool
 	newEntry(string, H)
 	playerStats() []*Stats
@@ -128,7 +127,7 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
-		err = cl.saveNoClear(ctx, g, cu)
+		err = cl.saveNoClear(ctx, g)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -156,7 +155,7 @@ func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
 		}
 
 		g.header().Status = Abandoned
-		if err := cl.saveNoClear(ctx, g, cu); err != nil {
+		if err := cl.saveNoClear(ctx, g); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -216,7 +215,7 @@ func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, int) bool) gin.Hand
 		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
-		err = cl.saveNoClear(ctx, g, cu)
+		err = cl.saveNoClear(ctx, g)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -288,29 +287,6 @@ func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID, crev 
 	return g, nil
 }
 
-// func (cl *GameClient[GT, G]) getCommitted(ctx *gin.Context) (G, error) {
-// 	Debugf(msgEnter)
-// 	defer Debugf(msgExit)
-//
-// 	h, err := cl.getIndex(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	snap, err := cl.revDocRef(h.id(), h.Undo.Current).Get(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	g := G(new(GT))
-// 	if err := snap.DataTo(g); err != nil {
-// 		return nil, err
-// 	}
-//
-// 	g.setID(h.id())
-// 	return g, nil
-// }
-
 func (cl *GameClient[GT, G]) txGetCommitted(tx *firestore.Transaction, gid string) (G, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
@@ -334,7 +310,7 @@ func (cl *GameClient[GT, G]) txGetCommitted(tx *firestore.Transaction, gid strin
 	return g, nil
 }
 
-func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*Index, error) {
+func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*index, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -343,7 +319,7 @@ func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*
 		return nil, err
 	}
 
-	i := new(Index)
+	i := new(index)
 	if err := snap.DataTo(i); err != nil {
 		return nil, err
 	}
@@ -352,25 +328,6 @@ func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*
 	return i, nil
 }
 
-// func (cl *GameClient[GT, G]) getIndex(ctx *gin.Context) (*Index, error) {
-// 	Debugf(msgEnter)
-// 	defer Debugf(msgExit)
-//
-// 	id := getID(ctx)
-// 	snap, err := cl.indexDocRef(id).Get(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	i := new(Index)
-// 	if err := snap.DataTo(i); err != nil {
-// 		return nil, err
-// 	}
-//
-// 	i.setID(id)
-// 	return i, nil
-// }
-
 func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
@@ -378,7 +335,7 @@ func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
 	g.header().UpdatedAt = timestamppb.Now()
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCache(tx, g, u); err != nil {
+		if err := cl.txCache(tx, g); err != nil {
 			return err
 		}
 
@@ -460,7 +417,7 @@ func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.Handler
 		}
 		g.stack().update()
 
-		if err := cl.commit(ctx, g, cu); err != nil {
+		if err := cl.commit(ctx, g); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -512,13 +469,13 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 		g.updateStatsFor(result.CurrentPlayerID)
 
 		if len(result.NextPlayerIDS) == 0 {
-			cl.endGame(ctx, g, cu)
+			cl.endGame(ctx, g)
 			return
 		}
 		// g.reset(result.NextPlayerIDS...)
 		notify := g.SetCurrentPlayers(result.NextPlayerIDS...)
 
-		err = cl.commit(ctx, g, cu)
+		err = cl.commit(ctx, g)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -760,16 +717,6 @@ func (g *Game[S, T, P]) statsFor(pid PID) *Stats {
 	return p.getStats()
 }
 
-// func (g *Game[S, T, P]) reset(pids ...PID) {
-// 	var zerop P
-// 	for _, pid := range pids {
-// 		p := g.PlayerByPID(pid)
-// 		if p != zerop {
-// 			p.Reset()
-// 		}
-// 	}
-// }
-
 type uidsForPidser interface {
 	UIDSForPIDS([]PID) []UID
 }
@@ -801,7 +748,7 @@ func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
 	return zerop
 }
 
-func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
+func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -817,7 +764,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	}
 	stats = g.updateUStats(stats, g.playerStats(), g.playerUIDS())
 
-	oldElos, newElos, err := cl.updateElo(ctx, g.header().Users(), places)
+	oldElos, newElos, err := cl.updateElo(ctx, g.header().users(), places)
 	if err != nil {
 		JErr(ctx, err)
 		return
@@ -826,13 +773,8 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
 	rs := g.getResults(oldElos, newElos)
 	g.newEntry("game-results", H{"Results": rs})
 
-	// if err := cl.clearCached(ctx, g.getHeader().ID, g.getHeader().Undo.Committed, cu.ID); err != nil {
-	// 	JErr(ctx, err)
-	// 	return
-	// }
-
 	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCommit(tx, g, cu); err != nil {
+		if err := cl.txCommit(tx, g); err != nil {
 			return err
 		}
 
@@ -897,7 +839,7 @@ type result struct {
 	Inc    string
 }
 
-// reflect player order game state to header
+// UpdateOrder reflects current order of players to the game header
 func (g *Game[S, T, P]) UpdateOrder() {
 	g.Header.OrderIDS = g.Players.PIDS()
 }
@@ -1042,14 +984,14 @@ func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
 func deepCopy[T any](obj T) T {
 	v, err := json.Marshal(obj)
 	if err != nil {
-		slog.Error("unable to marshal object: %v", err)
+		Errorf("unable to marshal object: %v", err)
 		panic("unable to marshal object")
 	}
 
 	var obj2 T
 	err = json.Unmarshal(v, &obj2)
 	if err != nil {
-		slog.Error("unable to unmarshal object: %v", err)
+		Errorf("unable to unmarshal object: %v", err)
 		panic("unable to unmarshal object")
 	}
 	return obj2
@@ -1075,8 +1017,8 @@ func (g *Game[S, T, P]) setStack(s *Stack) {
 	g.header().Undo = *s
 }
 
-func (g *Game[S, T, P]) getIndex() *Index {
-	return &Index{
+func (g *Game[S, T, P]) getIndex() *index {
+	return &index{
 		Header: *(g.header()),
 		Rev:    g.stack().Committed,
 	}

@@ -1,9 +1,6 @@
 package sn
 
 import (
-	"fmt"
-	"log/slog"
-
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -44,7 +41,7 @@ type Header struct {
 	Private                   bool
 }
 
-func (h *Header) Users() []*User {
+func (h *Header) users() []*User {
 	us := make([]*User, len(h.UserIDS))
 	for i := range us {
 		us[i] = &User{
@@ -58,7 +55,7 @@ func (h *Header) Users() []*User {
 			},
 		}
 	}
-	slog.Debug(fmt.Sprintf("Users: %#v", us))
+	Debugf("Users: %#v", us)
 	return us
 }
 
@@ -66,7 +63,7 @@ func (h *Header) stack() *Stack {
 	return &(h.Undo)
 }
 
-type Index struct {
+type index struct {
 	Header
 	Rev int
 }
