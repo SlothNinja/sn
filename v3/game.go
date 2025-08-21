@@ -195,9 +195,10 @@ func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, int) bool) gin.Hand
 		}
 
 		gid := getID(ctx)
-		stack, err := cl.getStack(ctx, gid, cu.ID)
+		stack, err := cl.getStack(ctx, gid, 0)
 		if err != nil {
 			JErr(ctx, err)
+			return
 		}
 
 		// do nothing if stack does not change
@@ -242,12 +243,14 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G,
 
 	gid := getID(ctx)
 	stack, err := cl.getStack(ctx, gid, cu.ID)
-
-	switch {
-	case status.Code(err) == codes.NotFound:
-		Warnf("stack not found")
-		stack = new(Stack)
-	case err != nil:
+	if status.Code(err) == codes.NotFound {
+		if stack, err = cl.getStack(ctx, gid, 0); status.Code(err) == codes.NotFound {
+			Warnf("stack not found")
+			stack = new(Stack)
+			err = nil
+		}
+	}
+	if err != nil {
 		return nil, err
 	}
 
