@@ -366,7 +366,8 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
-			Debugf(err.Error())
+			JErr(ctx, err)
+			return
 		}
 
 		g, err := cl.getGame(ctx, cu)
@@ -404,7 +405,8 @@ func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.Handler
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
-			Debugf(err.Error())
+			JErr(ctx, err)
+			return
 		}
 
 		g, err := cl.getGame(ctx, cu)
@@ -793,7 +795,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G) {
 
 	if err := g.sendEndGameNotifications(rs); err != nil {
 		// log but otherwise ignore send errors
-		Warnf(err.Error())
+		Warnf("%v", err.Error())
 	}
 	ctx.JSON(http.StatusOK, nil)
 

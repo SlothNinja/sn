@@ -2,7 +2,6 @@ package sn
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -91,8 +90,8 @@ func (g *Game[S, T, P]) updateUStat(stat ustat, pstats *Stats, uid UID) ustat {
 }
 
 func (cl *GameClient[GT, G]) getUStats(ctx *gin.Context, uids ...UID) ([]ustat, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	refs := pie.Map(uids, func(uid UID) *firestore.DocumentRef { return cl.ustatDocRef(uid) })
 	snaps, err := cl.FS.GetAll(ctx, refs)

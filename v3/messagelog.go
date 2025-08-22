@@ -2,7 +2,6 @@ package sn
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"cloud.google.com/go/firestore"
@@ -70,8 +69,8 @@ func (cl *GameClient[GT, G]) updateRead(ctx *gin.Context, uid UID, read []string
 }
 
 func getRead(ctx *gin.Context) ([]string, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	var obj struct {
 		Read []string
@@ -86,8 +85,8 @@ type message struct {
 }
 
 func getMessage(ctx *gin.Context) (*message, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	obj := new(message)
 	if err := ctx.ShouldBind(obj); err != nil {
@@ -98,8 +97,8 @@ func getMessage(ctx *gin.Context) (*message, error) {
 
 func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -122,8 +121,8 @@ func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 }
 
 func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context, cu *User) (*message, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	m, err := getMessage(ctx)
 	if err != nil {
@@ -137,8 +136,8 @@ func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context, cu *User) (*me
 }
 
 func (cl *GameClient[GT, G]) addMessage(ctx *gin.Context, m Message) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	_, err := cl.messagesCollectionRef(getID(ctx)).NewDoc().Create(ctx, m)
 	return err

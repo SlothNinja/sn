@@ -3,7 +3,6 @@ package sn
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -33,8 +32,8 @@ func (cl *GameClient[GT, G]) hashDocRef(id string) *firestore.DocumentRef {
 
 func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		if _, err := cl.RequireAdmin(ctx); err != nil {
 			JErr(ctx, err)
@@ -61,8 +60,8 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 }
 
 func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	var inv invitation
 
@@ -81,8 +80,8 @@ func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error)
 }
 
 func (cl *GameClient[GT, G]) getHash(ctx context.Context, id string) ([]byte, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	snap, err := cl.hashDocRef(id).Get(ctx)
 	if err != nil {
@@ -121,8 +120,8 @@ func (cl *GameClient[GT, G]) txDeleteInvitation(tx *firestore.Transaction, id st
 
 func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		var inv invitation
 		inv.Title = randomdata.SillyName()
@@ -133,8 +132,8 @@ func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -168,7 +167,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.updateSubs(ctx, inv.id(), token, cu.ID); err != nil {
-			slog.Warn(fmt.Sprintf("attempted to update sub: %q: %v", token, err))
+			Warnf("attempted to update sub: %q: %v", token, err)
 		}
 
 		inv2 := inv
@@ -181,8 +180,8 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 }
 
 func fromForm(ctx *gin.Context, cu *User) (invitation, []byte, SubToken, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	obj := struct {
 		Type       Type
@@ -224,8 +223,8 @@ func fromForm(ctx *gin.Context, cu *User) (invitation, []byte, SubToken, error) 
 
 func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -321,9 +320,9 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		go func() {
 			responses, err := cl.sendNotifications(ctx, g, g.header().CPIDS)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("attempted to send notifications to: %v: %v", g.header().CPIDS, err))
+				Warnf("attempted to send notifications to: %v: %v", g.header().CPIDS, err)
 			}
-			slog.Warn(fmt.Sprintf("batch send response: %v", responses))
+			Warnf("batch send response: %v", responses)
 		}()
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cpid)})
@@ -332,8 +331,8 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 // Returns (true, nil) if game should be started
 func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	err := inv.validateAcceptWith(u, pwd, hash)
 	if err != nil {
@@ -348,8 +347,8 @@ func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
 }
 
 func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	switch {
 	case len(inv.UserIDS) >= int(inv.NumPlayers):
@@ -359,7 +358,7 @@ func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
 	case len(hash) != 0:
 		err := bcrypt.CompareHashAndPassword(hash, pwd)
 		if err != nil {
-			slog.Debug(err.Error())
+			Warnf("%v", err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
 				u.Name, inv.Title, ErrValidation)
 		}
@@ -380,8 +379,8 @@ func (h Header) startGameMessage(pid PID) string {
 
 func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		inv, err := cl.getInvitation(ctx)
 		if err != nil {
@@ -414,7 +413,7 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.removeSubs(ctx, inv.id(), cu.ID); err != nil {
-			slog.Warn(fmt.Sprintf("error removing subs for %v: %v", cu.ID, err))
+			Warnf("error removing subs for %v: %v", cu.ID, err)
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.dropGameMessage(cu)})
@@ -422,8 +421,8 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 }
 
 func (inv *invitation) drop(u *User) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if err := inv.validateDrop(u); err != nil {
 		return err
@@ -434,8 +433,8 @@ func (inv *invitation) drop(u *User) error {
 }
 
 func (inv *invitation) validateDrop(u *User) error {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	switch {
 	case inv.Status != Recruiting:
@@ -499,8 +498,8 @@ type detail struct {
 
 func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		inv, err := cl.getInvitation(ctx)
 		if err != nil {

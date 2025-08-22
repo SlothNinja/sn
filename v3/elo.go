@@ -2,7 +2,6 @@ package sn
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -48,8 +47,8 @@ type eloMap map[UID]elo
 type placesMap map[UID]int
 
 func updateEloFor(uid1 UID, elos eloMap, places placesMap) int {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	var delta int
 	elo := elogo.NewElo()
@@ -84,8 +83,8 @@ func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, elos []elo) e
 }
 
 func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, us ...*User) ([]elo, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	refs := pie.Map(us, func(u *User) *firestore.DocumentRef { return cl.eloDocRef(u.ID) })
 	snaps, err := cl.FS.GetAll(ctx, refs)
@@ -112,8 +111,8 @@ func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, us ...*User) ([]elo, erro
 // Update pulls current Elo from db and provides rating updates and deltas per results for users associated with uids.
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uids
 func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, us []*User, places placesMap) ([]elo, []elo, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	oldElos, err := cl.getElos(ctx, us...)
 	if err != nil {

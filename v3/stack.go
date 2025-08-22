@@ -2,7 +2,6 @@ package sn
 
 import (
 	"context"
-	"log/slog"
 	"strconv"
 
 	"cloud.google.com/go/firestore"
@@ -90,8 +89,8 @@ func (cl *GameClient[GT, G]) stackDocRef(gid string, uid UID) *firestore.Documen
 }
 
 func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (*Stack, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	snap, err := cl.stackDocRef(gid, uid).Get(ctx)
 	if err != nil {

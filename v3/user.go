@@ -1,7 +1,6 @@
 package sn
 
 import (
-	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -35,13 +34,12 @@ type userData struct {
 
 func (cl *Client) cuHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
-			slog.Warn(err.Error())
-			ctx.JSON(http.StatusOK, gin.H{"CU": nil})
+			ctx.JSON(http.StatusOK, gin.H{"CU": nil, "Error": err.Error()})
 			return
 		}
 
@@ -53,7 +51,7 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 
 		token, err := getFBToken(ctx, cu.ID)
 		if err != nil {
-			slog.Warn(err.Error())
+			Warnf("%v", err.Error())
 			ctx.JSON(http.StatusOK, gin.H{"CU": cu})
 			return
 		}
@@ -63,8 +61,8 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 
 func (cl *Client) updateGodModeHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		slog.Debug(msgEnter)
-		defer slog.Debug(msgExit)
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
 
 		token := cl.GetSessionToken(ctx)
 		if token == nil {

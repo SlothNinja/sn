@@ -2,8 +2,6 @@ package sn
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"os"
 
 	"firebase.google.com/go/v4/messaging"
@@ -16,8 +14,8 @@ func getMJKeys() (string, string) {
 
 // SendMessages sends email messages
 func SendMessages(msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	pub, priv := getMJKeys()
 	mailjetClient := mailjet.NewMailjetClient(pub, priv)
@@ -26,14 +24,14 @@ func SendMessages(msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, erro
 		return mailjetClient.SendMailV31(&msgs)
 	}
 	for _, msg := range msgInfo {
-		slog.Debug(fmt.Sprintf("sent message: %#v", msg))
+		Debugf("sent message: %#v", msg)
 	}
 	return nil, nil
 }
 
 func (cl *GameClient[GT, G]) sendNotifications(ctx context.Context, g G, pids []PID) (*messaging.BatchResponse, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if len(pids) == 0 {
 		return nil, nil
@@ -43,7 +41,6 @@ func (cl *GameClient[GT, G]) sendNotifications(ctx context.Context, g G, pids []
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug(fmt.Sprintf("tokens: %v", tokens))
 	if len(tokens) < 1 {
 		return nil, nil
 	}

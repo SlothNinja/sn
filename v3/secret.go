@@ -3,7 +3,6 @@ package sn
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -26,8 +25,8 @@ type sessionSecret struct {
 }
 
 func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	s, found := cl.mcGetSessionSecrets()
 	if found {
@@ -39,14 +38,14 @@ func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error)
 		return s, err
 	}
 
-	slog.Debug("generated new secrets")
+	Debugf("generated new secrets")
 	return cl.updateSessionSecrets(ctx)
 }
 
 // mcGet attempts to pull secret from cache
 func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	k := secretsKey().Encode()
 
@@ -65,8 +64,8 @@ func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
 
 // dsGet attempt to pull secret from datastore
 func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	secretsDS, err := cl.getSessionSecretsDatastore(ctx)
 	if err != nil {
@@ -85,8 +84,8 @@ func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, erro
 }
 
 func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	secretsDS, err := cl.getSessionSecretsDatastore(c)
 	if err != nil {
@@ -103,8 +102,8 @@ func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error
 }
 
 func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	if IsProduction() {
 		return cl.getProductionSessionSecretsDatastore(ctx)
@@ -113,15 +112,15 @@ func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Cl
 }
 
 func (cl *Client) getProductionSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	return datastore.NewClient(ctx, cl.secretsProjectID)
 }
 
 func (cl *Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*datastore.Client, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	return datastore.NewClient(
 		ctx,

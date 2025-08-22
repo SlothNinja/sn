@@ -1,7 +1,6 @@
 package sn
 
 import (
-	"log/slog"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -17,8 +16,8 @@ func IsProduction() bool {
 // RequireLogin returns the logged in User
 // Otherwise, returns error
 func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	token := cl.GetSessionToken(ctx)
 	if token == nil {
@@ -31,8 +30,8 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
 // RequireAdmin returns the logged in user if user is admin
 // Otherwise, returns an error
 func (cl *Client) RequireAdmin(ctx *gin.Context) (*User, error) {
-	slog.Debug(msgEnter)
-	defer slog.Debug(msgExit)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	token := cl.GetSessionToken(ctx)
 	if token == nil {
