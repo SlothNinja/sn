@@ -58,6 +58,16 @@ func (s *Stack) commit() {
 	s.CommitEnd = max(s.CommitEnd, s.Committed)
 }
 
+// end returns the larger of UpdateEnd and CommitEnd
+func (s *Stack) end() int {
+	return max(s.UpdateEnd, s.CommitEnd)
+}
+
+// trunc sets UpdateEnd and CommitEnd to current Committed
+func (s *Stack) trunc() {
+	s.UpdateEnd, s.CommitEnd = s.Committed, s.Committed
+}
+
 // rollbackward rolls the stack backward to rev
 // returns true if rolling back to rev was possible
 // otherwise returns false and does not update stack

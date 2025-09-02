@@ -355,14 +355,14 @@ func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G) error 
 	defer Debugf(msgExit)
 
 	var err error
-	for i := g.stack().Current + 1; i <= g.stack().UpdateEnd; i++ {
+	for i := g.stack().Current + 1; i <= g.stack().end(); i++ {
 		err = errors.Join(err, tx.Delete(cl.revDocRef(g.id(), i)))
 	}
-
 	if err != nil {
 		return err
 	}
-	g.stack().UpdateEnd = g.stack().Committed
+
+	g.stack().trunc()
 	return nil
 }
 

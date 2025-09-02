@@ -82,10 +82,12 @@ func (p *Player) getStats() *Stats {
 }
 
 // Clear sets PerformedAction and CanFinish to false
+// Clear set Log to nil
 // Clear panics if p == nil
 func (p *Player) Clear() {
 	p.PerformedAction = false
 	p.CanFinish = false
+	p.Log = nil
 }
 
 // Reset clears player via Clear() and sets Passed to false
