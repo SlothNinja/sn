@@ -89,9 +89,9 @@ func (g *Game[S, T, P]) UpdateLastSubEntryFor(p P, data H) {
 }
 
 // IsLastEntryFor returns whethet last entry in game log is of a certain template and for a certain player.
-func (g *Game[S, T, P]) IsLastEntryFor(template string, p P) bool {
+func (g *Game[S, T, P]) IsLastEntryFor(p P, template string) bool {
 	e := g.lastEntry()
-	return e.Template == template && e.Data["PID"] == p.PID()
+	return e.Template == template && e.Data["PID"] == int64(p.PID())
 }
 
 // NewEntryDemoteLastFor demotes last entry in game log and player log to a subentry of the newly-add log entry.
