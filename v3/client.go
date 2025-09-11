@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
-	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -215,44 +213,19 @@ func (cl *GameClient[GT, G]) cachedCollectionRef(id string, rev int, uid UID) *f
 	return cl.revDocRef(id, rev).Collection("CacheFor").Doc(strconv.Itoa(int(uid))).Collection("Rev")
 }
 
-func (cl *GameClient[GT, G]) fullyCachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
-	// return cl.cachedCollectionRef(id).Doc(fmt.Sprintf("%d-%d-0", rev, uid))
-	return cl.fullyCachedCollectionRef(id, rev, uid).Doc(strconv.Itoa(crev))
-}
-
-func (cl *GameClient[GT, G]) fullyCachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection("FullCacheFor").Doc(strconv.Itoa(int(uid))).Collection("Rev")
-}
-
 func (cl *GameClient[GT, G]) messageDocRef(gid string, mid string) *firestore.DocumentRef {
 	return cl.messagesCollectionRef(gid).Doc(mid)
 }
 
 func (cl *GameClient[GT, G]) messagesCollectionRef(gid string) *firestore.CollectionRef {
-	return cl.committedCollectionRef().Doc(gid).Collection("Messages")
-}
-
-func (cl *GameClient[GT, G]) committedDocRef(gid string, rev int) *firestore.DocumentRef {
-	return cl.committedCollectionRef().Doc(fmt.Sprintf("%s-%d", gid, rev))
-}
-
-func (cl *GameClient[GT, G]) committedCollectionRef() *firestore.CollectionRef {
-	return cl.FS.Collection("Game")
+	return cl.gameCollectionRef().Doc(gid).Collection("Messages")
 }
 
 func (cl *GameClient[GT, G]) indexDocRef(id string) *firestore.DocumentRef {
 	return cl.FS.Collection("Index").Doc(id)
 }
 
-func (cl *GameClient[GT, G]) viewCollectionRef(id string, rev int) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection("ViewFor")
-}
-
-func (cl *GameClient[GT, G]) viewDocRef(id string, rev int, uid UID) *firestore.DocumentRef {
-	return cl.viewCollectionRef(id, rev).Doc(strconv.Itoa(int(uid)))
-}
-
-func (cl *GameClient[GT, G]) cuViewDocRef(gid string, uid UID) *firestore.DocumentRef {
+func (cl *GameClient[GT, G]) viewDocRef(gid string, uid UID) *firestore.DocumentRef {
 	return cl.FS.Collection("Game").Doc(gid).Collection("For").Doc(strconv.Itoa(int(uid)))
 }
 
@@ -288,15 +261,19 @@ func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G) error {
 		return fmt.Errorf("unexpected game change")
 	}
 
+	if err := cl.txDeleteCachedRevs(tx, g); err != nil {
+		return err
+	}
+
 	return cl.txSave(tx, g)
 }
 
-func (cl *GameClient[GT, G]) saveNoClear(ctx *gin.Context, g G) error {
+func (cl *GameClient[GT, G]) save(ctx *gin.Context, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txSaveNoClear(tx, g)
+		return cl.txSave(tx, g)
 	})
 }
 
@@ -304,42 +281,50 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := cl.txClearCache(tx, g); err != nil {
+	if err := cl.txUpdateViews(tx, g); err != nil {
 		return err
 	}
 
-	return cl.txSaveNoClear(tx, g)
+	if err := cl.txUpdateRev(tx, g); err != nil {
+		return err
+	}
+
+	return cl.txUpdateIndex(tx, g)
 }
 
-func (cl *GameClient[GT, G]) txSaveNoClear(tx *firestore.Transaction, g G) error {
+func (cl *GameClient[GT, G]) txUpdateIndex(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
-
-	if err := cl.txCache(tx, g); err != nil {
-		return err
-	}
 
 	return tx.Set(cl.indexDocRef(g.id()), g.getIndex())
 }
 
-func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G) error {
+func (cl *GameClient[GT, G]) txUpdateRev(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	if err := tx.Set(cl.revDocRef(g.id(), g.stack().Current), g); err != nil {
-		return err
-	}
+	return tx.Set(cl.revDocRef(g.id(), g.stack().Current), g)
+}
 
-	if err := tx.Set(cl.stackDocRef(g.id(), noUID), g.stack()); err != nil {
-		return err
-	}
+func (cl *GameClient[GT, G]) updateViews(ctx *gin.Context, g G) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+		return cl.txUpdateViews(tx, g)
+	})
+}
+
+func (cl *GameClient[GT, G]) txUpdateViews(tx *firestore.Transaction, g G) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
 	// By implementing Views interface, game may provide a customized view for each user.
 	// Primarily used to ensure hidden game information not leaked to users via json objects
 	// sent to browsers.
 	uids, views := g.Views()
 	for i, v := range views {
-		if err := tx.Set(cl.cuViewDocRef(g.id(), uids[i]), v); err != nil {
+		if err := tx.Set(cl.viewDocRef(g.id(), uids[i]), v); err != nil {
 			return err
 		}
 		if err := tx.Set(cl.stackDocRef(g.id(), uids[i]), g.stack()); err != nil {
@@ -350,13 +335,13 @@ func (cl *GameClient[GT, G]) txCache(tx *firestore.Transaction, g G) error {
 }
 
 // attempts to remove revs passed current save
-func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G) error {
+func (cl *GameClient[GT, G]) txDeleteCachedRevs(tx *firestore.Transaction, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	var err error
 	for i := g.stack().Current + 1; i <= g.stack().end(); i++ {
-		err = errors.Join(err, tx.Delete(cl.revDocRef(g.id(), i)))
+		err = errors.Join(err, cl.txDeleteRev(tx, g, i))
 	}
 	if err != nil {
 		return err
@@ -364,6 +349,13 @@ func (cl *GameClient[GT, G]) txClearCache(tx *firestore.Transaction, g G) error 
 
 	g.stack().trunc()
 	return nil
+}
+
+func (cl *GameClient[GT, G]) txDeleteRev(tx *firestore.Transaction, g G, rev int) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	return tx.Delete(cl.revDocRef(g.id(), rev))
 }
 
 // By implementing Views interface, game may provide a customized view for each user.
@@ -375,7 +367,7 @@ func (cl *GameClient[GT, G]) txViews(tx *firestore.Transaction, g G) error {
 
 	uids, views := g.Views()
 	for i, v := range views {
-		if err := tx.Set(cl.cuViewDocRef(g.id(), uids[i]), v); err != nil {
+		if err := tx.Set(cl.viewDocRef(g.id(), uids[i]), v); err != nil {
 			return err
 		}
 	}
@@ -387,13 +379,4 @@ func (cl *GameClient[GT, G]) txSaveStack(tx *firestore.Transaction, g G, u *User
 	defer Debugf(msgExit)
 
 	return tx.Set(cl.stackDocRef(g.id(), u.ID), g.stack())
-}
-
-func docRefFor(ref *firestore.DocumentRef, uid UID) bool {
-	ss := pie.Reverse(strings.Split(ref.ID, "-"))
-	s := pie.Pop(&ss)
-	if *s == "0" {
-		s = pie.Pop(&ss)
-	}
-	return *s == fmt.Sprintf("%d", uid)
 }

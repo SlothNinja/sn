@@ -106,10 +106,10 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 			return
 		}
 
-		gid := getID(ctx)
-		stack, err := cl.getStack(ctx, gid, cu.ID)
+		stack, err := cl.getStack(ctx, getID(ctx), cu.ID)
 		if err != nil {
 			JErr(ctx, err)
+			return
 		}
 
 		// do nothing if stack does not change
@@ -127,8 +127,7 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
-		err = cl.saveNoClear(ctx, g)
-		if err != nil {
+		if err := cl.updateViews(ctx, g); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -155,7 +154,7 @@ func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
 		}
 
 		g.header().Status = Abandoned
-		if err := cl.saveNoClear(ctx, g); err != nil {
+		if err := cl.save(ctx, g); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -216,7 +215,7 @@ func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, int) bool) gin.Hand
 		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
-		err = cl.saveNoClear(ctx, g)
+		err = cl.save(ctx, g)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -255,61 +254,31 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G,
 	}
 
 	rv := firstOrDefault(rev, stack.Current)
-	snap, err := cl.revDocRef(gid, rv).Get(ctx)
+	g, err := cl.getRev(ctx, gid, rv)
 	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
 		return nil, err
 	}
 
 	stack.Current = rv
 	g.setStack(stack)
+	return g, nil
+}
+
+func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, gid string, rev int) (G, error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	snap, err := cl.revDocRef(gid, rev).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	g := G(new(GT))
+	if err := snap.DataTo(g); err != nil {
+		return nil, err
+	}
+
 	g.setID(gid)
-	return g, nil
-}
-
-func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, rev int, uid UID, crev int) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	id := getID(ctx)
-	snap, err := cl.fullyCachedDocRef(id, rev, uid, crev).Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
-		return nil, err
-	}
-
-	g.setID(id)
-	return g, nil
-}
-
-func (cl *GameClient[GT, G]) txGetCommitted(tx *firestore.Transaction, gid string) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	h, err := cl.txGetIndex(tx, gid)
-	if err != nil {
-		return nil, err
-	}
-
-	snap, err := tx.Get(cl.revDocRef(h.id(), h.Undo.Current))
-	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
-		return nil, err
-	}
-
-	g.setID(h.id())
 	return g, nil
 }
 
@@ -331,22 +300,16 @@ func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*
 	return i, nil
 }
 
-func (cl *GameClient[GT, G]) putCached(ctx *gin.Context, g G, u *User) error {
+func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	g.header().UpdatedAt = timestamppb.Now()
-
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCache(tx, g); err != nil {
+		if err := cl.txUpdateViews(tx, g); err != nil {
 			return err
 		}
 
-		if err := tx.Set(cl.revDocRef(g.id(), g.stack().Current), g); err != nil {
-			return err
-		}
-
-		return tx.Set(cl.stackDocRef(g.id(), u.ID), g.stack())
+		return cl.txUpdateRev(tx, g)
 	})
 }
 
@@ -383,8 +346,8 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 		}
 		g.stack().update()
 
-		Debugf("stack: %#v", g.stack())
-		if err := cl.putCached(ctx, g, cu); err != nil {
+		g.header().UpdatedAt = timestamppb.Now()
+		if err := cl.cacheRev(ctx, g); err != nil {
 			JErr(ctx, err)
 			return
 		}

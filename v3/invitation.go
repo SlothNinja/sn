@@ -308,7 +308,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSaveNoClear(tx, g); err != nil {
+			if err := cl.txSave(tx, g); err != nil {
 				return err
 			}
 			return cl.txDeleteInvitation(tx, inv.id())
