@@ -205,12 +205,12 @@ func (cl *GameClient[GT, G]) gameCollectionRef() *firestore.CollectionRef {
 	return cl.FS.Collection("Game")
 }
 
-func (cl *GameClient[GT, G]) cachedDocRef(id string, rev int, uid UID, crev int) *firestore.DocumentRef {
-	return cl.cachedCollectionRef(id, rev, uid).Doc(strconv.Itoa(crev))
+func (cl *GameClient[GT, G]) cachedDocRef(id string, uid UID, rev int) *firestore.DocumentRef {
+	return cl.cachedCollectionRef(id, uid).Doc(strconv.Itoa(rev))
 }
 
-func (cl *GameClient[GT, G]) cachedCollectionRef(id string, rev int, uid UID) *firestore.CollectionRef {
-	return cl.revDocRef(id, rev).Collection("CacheFor").Doc(strconv.Itoa(int(uid))).Collection("Rev")
+func (cl *GameClient[GT, G]) cachedCollectionRef(gid string, uid UID) *firestore.CollectionRef {
+	return cl.gameDocRef(gid).Collection("CacheFor").Doc(uid.toString()).Collection("Rev")
 }
 
 func (cl *GameClient[GT, G]) messageDocRef(gid string, mid string) *firestore.DocumentRef {
@@ -226,7 +226,7 @@ func (cl *GameClient[GT, G]) indexDocRef(id string) *firestore.DocumentRef {
 }
 
 func (cl *GameClient[GT, G]) viewDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.FS.Collection("Game").Doc(gid).Collection("For").Doc(strconv.Itoa(int(uid)))
+	return cl.gameDocRef(gid).Collection("For").Doc(uid.toString())
 }
 
 // Close closes the game service client
@@ -235,33 +235,33 @@ func (cl *GameClient[GT, G]) Close() error {
 	return cl.Client.Close()
 }
 
-func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G) error {
+func (cl *GameClient[GT, G]) commit(ctx *gin.Context, g G, uid UID) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	g.header().UpdatedAt = timestamppb.Now()
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		return cl.txCommit(tx, g)
+		return cl.txCommit(tx, g, uid)
 	})
 }
 
-func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G) error {
+func (cl *GameClient[GT, G]) txCommit(tx *firestore.Transaction, g G, uid UID) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	g.stack().commit()
 
-	i, err := cl.txGetIndex(tx, g.id())
+	index, err := cl.txGetIndex(tx, g.id())
 	if err != nil {
 		return err
 	}
 
-	if i.Rev+1 != g.stack().Committed {
+	if index.Rev+1 != g.stack().Committed {
 		return fmt.Errorf("unexpected game change")
 	}
 
-	if err := cl.txDeleteCachedRevs(tx, g); err != nil {
+	if err := cl.txDeleteCachedRevs(tx, g, uid); err != nil {
 		return err
 	}
 
@@ -286,6 +286,10 @@ func (cl *GameClient[GT, G]) txSave(tx *firestore.Transaction, g G) error {
 	}
 
 	if err := cl.txUpdateRev(tx, g); err != nil {
+		return err
+	}
+
+	if err := cl.txSaveStacks(tx, g); err != nil {
 		return err
 	}
 
@@ -327,21 +331,21 @@ func (cl *GameClient[GT, G]) txUpdateViews(tx *firestore.Transaction, g G) error
 		if err := tx.Set(cl.viewDocRef(g.id(), uids[i]), v); err != nil {
 			return err
 		}
-		if err := tx.Set(cl.stackDocRef(g.id(), uids[i]), g.stack()); err != nil {
-			return err
-		}
+		// if err := tx.Set(cl.stackDocRef(g.id(), uids[i]), g.stack()); err != nil {
+		// 	return err
+		// }
 	}
 	return nil
 }
 
 // attempts to remove revs passed current save
-func (cl *GameClient[GT, G]) txDeleteCachedRevs(tx *firestore.Transaction, g G) error {
+func (cl *GameClient[GT, G]) txDeleteCachedRevs(tx *firestore.Transaction, g G, uid UID) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	var err error
-	for i := g.stack().Current + 1; i <= g.stack().end(); i++ {
-		err = errors.Join(err, cl.txDeleteRev(tx, g, i))
+	for rev := g.stack().Current + 1; rev <= g.stack().end(); rev++ {
+		err = errors.Join(err, cl.txDeleteCachedRev(tx, g, uid, rev))
 	}
 	if err != nil {
 		return err
@@ -351,11 +355,11 @@ func (cl *GameClient[GT, G]) txDeleteCachedRevs(tx *firestore.Transaction, g G) 
 	return nil
 }
 
-func (cl *GameClient[GT, G]) txDeleteRev(tx *firestore.Transaction, g G, rev int) error {
+func (cl *GameClient[GT, G]) txDeleteCachedRev(tx *firestore.Transaction, g G, uid UID, rev int) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	return tx.Delete(cl.revDocRef(g.id(), rev))
+	return tx.Delete(cl.cachedDocRef(g.id(), uid, rev))
 }
 
 // By implementing Views interface, game may provide a customized view for each user.
@@ -374,9 +378,20 @@ func (cl *GameClient[GT, G]) txViews(tx *firestore.Transaction, g G) error {
 	return nil
 }
 
-func (cl *GameClient[GT, G]) txSaveStack(tx *firestore.Transaction, g G, u *User) error {
+func (cl *GameClient[GT, G]) txSaveStack(tx *firestore.Transaction, g G, uid UID) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	return tx.Set(cl.stackDocRef(g.id(), u.ID), g.stack())
+	return tx.Set(cl.stackDocRef(g.id(), uid), g.stack())
+}
+
+func (cl *GameClient[GT, G]) txSaveStacks(tx *firestore.Transaction, g G) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	var err error
+	for _, uid := range append(g.header().UserIDS, 0) {
+		err = errors.Join(err, cl.txSaveStack(tx, g, uid))
+	}
+	return err
 }

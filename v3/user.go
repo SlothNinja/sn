@@ -108,3 +108,7 @@ func getUID(ctx *gin.Context, param string) (UID, error) {
 	id, err := strconv.ParseInt(ctx.Param(param), 10, 64)
 	return UID(id), err
 }
+
+func (uid UID) toString() string {
+	return strconv.Itoa(int(uid))
+}

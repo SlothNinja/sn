@@ -15,8 +15,6 @@ import (
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/mailjet/mailjet-apiv3-go"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -106,7 +104,8 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 			return
 		}
 
-		stack, err := cl.getStack(ctx, getID(ctx), cu.ID)
+		gid := getID(ctx)
+		stack, err := cl.getStack(ctx, gid, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -118,16 +117,19 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 			return
 		}
 
-		g, err := cl.getGame(ctx, cu, stack.Current)
+		g, err := cl.getGameWithStack(ctx, gid, cu.ID, stack)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
-
-		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
-		if err := cl.updateViews(ctx, g); err != nil {
+		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+			if err := cl.txUpdateViews(tx, g); err != nil {
+				return err
+			}
+			return cl.txSaveStack(tx, g, cu.ID)
+		}); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -147,7 +149,7 @@ func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
 			return
 		}
 
-		g, err := cl.getGame(ctx, cu)
+		g, err := cl.getGameFor(ctx, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -200,19 +202,21 @@ func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, int) bool) gin.Hand
 			return
 		}
 
+		Debugf("obj.Rev: %d", obj.Rev)
+		Debugf("stack: %d", stack)
 		// do nothing if stack does not change
 		if !update(stack, obj.Rev) {
 			ctx.JSON(http.StatusOK, nil)
 			return
 		}
+		Debugf("update stack: %d", stack)
 
-		g, err := cl.getGame(ctx, cu, stack.Current)
+		g, err := cl.getGameWithStack(ctx, gid, cu.ID, stack)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
-		g.setStack(stack)
 		g.header().UpdatedAt = timestamppb.Now()
 
 		err = cl.save(ctx, g)
@@ -236,30 +240,60 @@ func firstOrDefault[T any](v []T, d T) T {
 
 // getGame returns game for current, unless a single rev value provide.
 // In which case, getGame returns the requested rev
-func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G, error) {
+// func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G, error) {
+// 	Debugf(msgEnter)
+// 	defer Debugf(msgExit)
+//
+// 	gid := getID(ctx)
+// 	stack, err := cl.getStack(ctx, gid, cu.ID)
+// 	if status.Code(err) == codes.NotFound {
+// 		if stack, err = cl.getStack(ctx, gid, 0); status.Code(err) == codes.NotFound {
+// 			Warnf("stack not found")
+// 			stack = new(Stack)
+// 			err = nil
+// 		}
+// 	}
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	rv := firstOrDefault(rev, stack.Current)
+// 	g, err := cl.getRev(ctx, gid, rv)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	stack.Current = rv
+// 	g.setStack(stack)
+// 	return g, nil
+// }
+
+func (cl *GameClient[GT, G]) getGameFor(ctx *gin.Context, uid UID) (G, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
 	gid := getID(ctx)
-	stack, err := cl.getStack(ctx, gid, cu.ID)
-	if status.Code(err) == codes.NotFound {
-		if stack, err = cl.getStack(ctx, gid, 0); status.Code(err) == codes.NotFound {
-			Warnf("stack not found")
-			stack = new(Stack)
-			err = nil
-		}
-	}
+	stack, err := cl.getStack(ctx, gid, uid)
 	if err != nil {
 		return nil, err
 	}
 
-	rv := firstOrDefault(rev, stack.Current)
-	g, err := cl.getRev(ctx, gid, rv)
+	return cl.getGameWithStack(ctx, gid, uid, stack)
+}
+
+func (cl *GameClient[GT, G]) getGameWithStack(ctx *gin.Context, gid string, uid UID, stack *Stack) (g G, err error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	if stack.currentIsCached() {
+		g, err = cl.getCached(ctx, gid, uid, stack.Current)
+	} else {
+		g, err = cl.getRev(ctx, gid, stack.Current)
+	}
+
 	if err != nil {
 		return nil, err
 	}
-
-	stack.Current = rv
 	g.setStack(stack)
 	return g, nil
 }
@@ -269,6 +303,24 @@ func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, gid string, rev int) (G, e
 	defer Debugf(msgExit)
 
 	snap, err := cl.revDocRef(gid, rev).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	g := G(new(GT))
+	if err := snap.DataTo(g); err != nil {
+		return nil, err
+	}
+
+	g.setID(gid)
+	return g, nil
+}
+
+func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, gid string, uid UID, rev int) (G, error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	snap, err := cl.cachedDocRef(gid, uid, rev).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +352,7 @@ func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*
 	return i, nil
 }
 
-func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G) error {
+func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G, uid UID) error {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -309,8 +361,19 @@ func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G) error {
 			return err
 		}
 
-		return cl.txUpdateRev(tx, g)
+		if err := cl.txSaveStack(tx, g, uid); err != nil {
+			return err
+		}
+
+		return cl.txCacheRev(tx, g, uid)
 	})
+}
+
+func (cl *GameClient[GT, G]) txCacheRev(tx *firestore.Transaction, g G, uid UID) error {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
+	return tx.Set(cl.cachedDocRef(g.id(), uid, g.stack().Current), g)
 }
 
 // Result provides a return value associated with performing a game action
@@ -333,11 +396,13 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 			return
 		}
 
-		g, err := cl.getGame(ctx, cu)
+		g, err := cl.getGameFor(ctx, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
+
+		Debugf("CachedHandler stack: %#v", g.stack())
 
 		result, err := action(g, ctx, cu)
 		if err != nil {
@@ -347,7 +412,7 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 		g.stack().update()
 
 		g.header().UpdatedAt = timestamppb.Now()
-		if err := cl.cacheRev(ctx, g); err != nil {
+		if err := cl.cacheRev(ctx, g, cu.ID); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -372,7 +437,7 @@ func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.Handler
 			return
 		}
 
-		g, err := cl.getGame(ctx, cu)
+		g, err := cl.getGameFor(ctx, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -385,7 +450,7 @@ func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.Handler
 		}
 		g.stack().update()
 
-		if err := cl.commit(ctx, g); err != nil {
+		if err := cl.commit(ctx, g, cu.ID); err != nil {
 			JErr(ctx, err)
 			return
 		}
@@ -422,7 +487,7 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 			return
 		}
 
-		g, err := cl.getGame(ctx, cu)
+		g, err := cl.getGameFor(ctx, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -437,13 +502,12 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 		g.updateStatsFor(result.CurrentPlayerID)
 
 		if len(result.NextPlayerIDS) == 0 {
-			cl.endGame(ctx, g)
+			cl.endGame(ctx, g, cu.ID)
 			return
 		}
-		// g.reset(result.NextPlayerIDS...)
 		notify := g.SetCurrentPlayers(result.NextPlayerIDS...)
 
-		err = cl.commit(ctx, g)
+		err = cl.commit(ctx, g, cu.ID)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -716,7 +780,7 @@ func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
 	return zerop
 }
 
-func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G) {
+func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, uid UID) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
@@ -742,7 +806,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G) {
 	g.newEntry("game-results", H{"Results": rs})
 
 	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCommit(tx, g); err != nil {
+		if err := cl.txCommit(tx, g, uid); err != nil {
 			return err
 		}
 

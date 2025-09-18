@@ -68,6 +68,10 @@ func (s *Stack) trunc() {
 	s.UpdateEnd, s.CommitEnd = s.Committed, s.Committed
 }
 
+func (s *Stack) currentIsCached() bool {
+	return s.Current > s.Committed
+}
+
 // rollbackward rolls the stack backward to rev
 // returns true if rolling back to rev was possible
 // otherwise returns false and does not update stack

@@ -59,9 +59,9 @@ func (h *Header) users() []*User {
 	return us
 }
 
-func (h *Header) stack() *Stack {
-	return &(h.Undo)
-}
+// func (h *Header) stack() *Stack {
+// 	return &(h.Undo)
+// }
 
 type index struct {
 	Header
