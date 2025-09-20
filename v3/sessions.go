@@ -28,7 +28,7 @@ func getFBToken(ctx *gin.Context, uid UID) (string, error) {
 		return "", fmt.Errorf("error getting Auth client: %w", err)
 	}
 
-	token, err := client.CustomToken(ctx, fmt.Sprintf("%d", uid))
+	token, err := client.CustomToken(ctx, uid.toString())
 	if err != nil {
 		return "", fmt.Errorf("error minting custom token: %w", err)
 	}

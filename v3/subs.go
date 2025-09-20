@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strconv"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -36,7 +35,7 @@ func (cl *GameClient[GT, G]) subCollectionRef(gid string) *firestore.CollectionR
 }
 
 func (cl *GameClient[GT, G]) subDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.subCollectionRef(gid).Doc(strconv.Itoa(int(uid)))
+	return cl.subCollectionRef(gid).Doc(uid.toString())
 }
 
 func (cl *GameClient[GT, G]) subInvCollectionRef(id string) *firestore.CollectionRef {
@@ -44,7 +43,7 @@ func (cl *GameClient[GT, G]) subInvCollectionRef(id string) *firestore.Collectio
 }
 
 func (cl *GameClient[GT, G]) subInvDocRef(id string, uid UID) *firestore.DocumentRef {
-	return cl.subInvCollectionRef(id).Doc(strconv.Itoa(int(uid)))
+	return cl.subInvCollectionRef(id).Doc(uid.toString())
 }
 
 func (cl *GameClient[GT, G]) addSub(ctx *gin.Context, gid string, token SubToken, uid UID) error {

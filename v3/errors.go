@@ -21,6 +21,9 @@ var (
 
 	// ErrNotLoggedIn represents user not logged in validation error
 	ErrNotLoggedIn = fmt.Errorf("must login to access resource: %w", ErrValidation)
+
+	// ErrUserNil represents user was unexpectantly nil
+	ErrUserNil = fmt.Errorf("user cannot be nil")
 )
 
 // JErr returns an error message via JSON

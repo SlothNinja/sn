@@ -65,7 +65,7 @@ func (h *Header) users() []*User {
 
 type index struct {
 	Header
-	Rev int
+	Rev Rev
 }
 
 func (h *Header) id() string {

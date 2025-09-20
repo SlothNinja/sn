@@ -7,13 +7,19 @@ import (
 	"cloud.google.com/go/firestore"
 )
 
+type Rev int
+
+func (rev Rev) toString() string {
+	return strconv.Itoa(int(rev))
+}
+
 // Stack provides an undo stack for a game
 type Stack struct {
-	Current   int
-	Updated   int
-	Committed int
-	UpdateEnd int
-	CommitEnd int
+	Current   Rev
+	Updated   Rev
+	Committed Rev
+	UpdateEnd Rev
+	CommitEnd Rev
 }
 
 // undo updates stack to undo an action
@@ -59,7 +65,7 @@ func (s *Stack) commit() {
 }
 
 // end returns the larger of UpdateEnd and CommitEnd
-func (s *Stack) end() int {
+func (s *Stack) end() Rev {
 	return max(s.UpdateEnd, s.CommitEnd)
 }
 
@@ -75,7 +81,7 @@ func (s *Stack) currentIsCached() bool {
 // rollbackward rolls the stack backward to rev
 // returns true if rolling back to rev was possible
 // otherwise returns false and does not update stack
-func (s *Stack) rollbackward(rev int) bool {
+func (s *Stack) rollbackward(rev Rev) bool {
 	rollbackward := s.Current == s.Committed && s.Committed > 0 && rev >= 0 && rev < s.Current
 	if rollbackward {
 		s.Current, s.Updated, s.Committed = rev, rev, rev
@@ -86,7 +92,7 @@ func (s *Stack) rollbackward(rev int) bool {
 // Rollbackward rolls the stack forward to rev
 // returns true if rolling forward to rev was possible
 // otherwise returns false and does not update stack
-func (s *Stack) rollforward(rev int) bool {
+func (s *Stack) rollforward(rev Rev) bool {
 	rollforward := s.Current == s.Committed && s.Committed < s.CommitEnd && rev <= s.CommitEnd && rev > s.Current
 	if rollforward {
 		s.Current, s.Updated, s.Committed = rev, rev, rev
@@ -99,7 +105,7 @@ func (cl *GameClient[GT, G]) stackCollectionRef() *firestore.CollectionRef {
 }
 
 func (cl *GameClient[GT, G]) stackDocRef(gid string, uid UID) *firestore.DocumentRef {
-	return cl.stackCollectionRef().Doc(gid).Collection("For").Doc(strconv.Itoa(int(uid)))
+	return cl.stackCollectionRef().Doc(gid).Collection("For").Doc(uid.toString())
 }
 
 func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (*Stack, error) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 
 	"cloud.google.com/go/firestore"
 	"firebase.google.com/go/v4/messaging"
@@ -264,13 +263,13 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		if _, err := cl.FCM.SubscribeToTopic(ctx, []string{string(obj.Token)}, strconv.Itoa(int(cu.ID))); err != nil {
+		if _, err := cl.FCM.SubscribeToTopic(ctx, []string{string(obj.Token)}, cu.ID.toString()); err != nil {
 			Warnf("attempted to update sub: %q: %v", obj.Token, err)
 		}
 
 		go func() {
 			message := &messaging.Message{
-				Topic: strconv.Itoa(int(cu.ID)),
+				Topic: cu.ID.toString(),
 				Notification: &messaging.Notification{
 					Title:    "You joined game",
 					Body:     "Thanks for joining game.",
@@ -308,7 +307,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(tx, g); err != nil {
+			if err := cl.txSave(tx, g, cu); err != nil {
 				return err
 			}
 			return cl.txDeleteInvitation(tx, inv.id())
