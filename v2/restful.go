@@ -10,6 +10,7 @@ import (
 
 	render "github.com/SlothNinja/gin-render"
 	"github.com/SlothNinja/inflect"
+	"github.com/SlothNinja/sn/v3"
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,6 +38,9 @@ func TemplatesFrom(c *gin.Context) (ts map[string]*template.Template) {
 }
 
 func ParseTemplates(path string, ext ...string) render.Render {
+	sn.Debugf("Entering")
+	defer sn.Debugf("Exiting")
+
 	r := render.New()
 	r.TemplatesDir = path
 	r.Exts = ext
