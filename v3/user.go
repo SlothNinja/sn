@@ -43,13 +43,28 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 			return
 		}
 
+		ctx.JSON(http.StatusOK, gin.H{"CU": cu})
+	}
+}
+
+func (cl *GameClient[GT, G]) fbCUHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		Debugf(msgEnter)
+		defer Debugf(msgExit)
+
+		cu, err := cl.RequireLogin(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusOK, gin.H{"CU": nil, "Error": err.Error()})
+			return
+		}
+
 		tokenKey := getFSTokenKey()
 		if tokenKey == "" {
 			ctx.JSON(http.StatusOK, gin.H{"CU": cu})
 			return
 		}
 
-		token, err := getFBToken(ctx, cu.ID)
+		token, err := cl.getFBToken(ctx, cu.ID, cu.Admin)
 		if err != nil {
 			Warnf("%v", err.Error())
 			ctx.JSON(http.StatusOK, gin.H{"CU": cu})
@@ -59,7 +74,7 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 	}
 }
 
-func (cl *Client) updateGodModeHandler() gin.HandlerFunc {
+func (cl *GameClient[GT, G]) updateGodModeHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		Debugf(msgEnter)
 		defer Debugf(msgExit)
@@ -106,4 +121,12 @@ const noUID UID = 0
 
 func (uid UID) toString() string {
 	return strconv.Itoa(int(uid))
+}
+
+// UIndex represents a unique index value for a user
+type UIndex int
+
+// ToPID returns an id unique for the player associated with the user index value
+func (uIndex UIndex) ToPID() PID {
+	return PID(uIndex + 1)
 }

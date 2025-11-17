@@ -2,20 +2,17 @@ package sn
 
 import (
 	"bytes"
-	"context"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"math/rand"
-	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/elliotchance/pie/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/mailjet/mailjet-apiv3-go"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Game implements a game
@@ -36,9 +33,7 @@ type Gamer[G any] interface {
 	setID(string)
 	stack() *Stack
 	setStack(*Stack)
-	getIndex() *index
-	isCurrentPlayer(*User) bool
-	isPlayer(*User) bool
+	toIndex() *index
 	newEntry(string, H)
 	playerStats() []*Stats
 	playerUIDS() []UID
@@ -46,7 +41,7 @@ type Gamer[G any] interface {
 	getResults([]elo, []elo) results
 	sendEndGameNotifications(results) error
 	setCurrentPlayerers
-	setFinishOrder(compareFunc) placesMap
+	setFinishOrder(compareFunc) (placesMap, placesSMap)
 	starter
 	statsFor(PID) *Stats
 	updateUStats([]ustat, []*Stats, []UID) []ustat
@@ -71,7 +66,7 @@ type Comparer interface {
 }
 
 type starter interface {
-	Start(Header) PID
+	Start(Header) (PID, error)
 }
 
 type setCurrentPlayerers interface {
@@ -82,302 +77,12 @@ func getID(ctx *gin.Context) string {
 	return ctx.Param("id")
 }
 
-func (cl *GameClient[GT, G]) resetHandler() gin.HandlerFunc {
-	return cl.stackHandler((*Stack).reset)
-}
-
-func (cl *GameClient[GT, G]) undoHandler() gin.HandlerFunc {
-	return cl.stackHandler((*Stack).undo)
-}
-
-func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
-	return cl.stackHandler((*Stack).redo)
-}
-
-func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireLogin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		gid := getID(ctx)
-		stack, err := cl.getStack(ctx, gid, cu.ID)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		// do nothing if stack does not change
-		if !update(stack) {
-			ctx.JSON(http.StatusOK, nil)
-			return
-		}
-
-		g, err := cl.getGameWithStack(ctx, gid, cu.ID, stack)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-		g.header().UpdatedAt = timestamppb.Now()
-
-		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txUpdateViews(tx, g, cu); err != nil {
-				return err
-			}
-			return cl.txSaveStack(tx, g, cu.ID)
-		}); err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, nil)
+func getUID(ctx *gin.Context) (UID, error) {
+	obj := struct{ UID UID }{}
+	if err := ctx.ShouldBindBodyWithJSON(&obj); err != nil {
+		return 0, err
 	}
-}
-
-func (cl *GameClient[GT, G]) abandonHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireAdmin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g, err := cl.getGameFor(ctx, cu.ID)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g.header().Status = Abandoned
-		if err := cl.save(ctx, g, cu); err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		msg := fmt.Sprintf("%s has been abandoned.", g.header().Title)
-		ctx.JSON(http.StatusOK, H{"Message": msg})
-	}
-}
-
-func (cl *GameClient[GT, G]) rollbackHandler() gin.HandlerFunc {
-	return cl.rollHandler((*Stack).rollbackward)
-}
-
-func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
-	return cl.rollHandler((*Stack).rollforward)
-}
-
-func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, Rev) bool) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
-
-		cu, err := cl.RequireAdmin(ctx)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		obj := struct{ Rev }{}
-
-		err = ctx.ShouldBind(&obj)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		gid := getID(ctx)
-		stack, err := cl.getStack(ctx, gid, 0)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		// do nothing if stack does not change
-		if !update(stack, obj.Rev) {
-			ctx.JSON(http.StatusOK, nil)
-			return
-		}
-
-		g, err := cl.getGameWithStack(ctx, gid, cu.ID, stack)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		g.header().UpdatedAt = timestamppb.Now()
-
-		err = cl.save(ctx, g, cu)
-		if err != nil {
-			JErr(ctx, err)
-			return
-		}
-
-		ctx.JSON(http.StatusOK, nil)
-	}
-}
-
-// return first item of v, if v as length 1
-// otherwise, returns default value d
-func firstOrDefault[T any](v []T, d T) T {
-	if len(v) == 1 {
-		return v[0]
-	}
-	return d
-}
-
-// getGame returns game for current, unless a single rev value provide.
-// In which case, getGame returns the requested rev
-// func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, cu *User, rev ...int) (G, error) {
-// 	Debugf(msgEnter)
-// 	defer Debugf(msgExit)
-//
-// 	gid := getID(ctx)
-// 	stack, err := cl.getStack(ctx, gid, cu.ID)
-// 	if status.Code(err) == codes.NotFound {
-// 		if stack, err = cl.getStack(ctx, gid, 0); status.Code(err) == codes.NotFound {
-// 			Warnf("stack not found")
-// 			stack = new(Stack)
-// 			err = nil
-// 		}
-// 	}
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	rv := firstOrDefault(rev, stack.Current)
-// 	g, err := cl.getRev(ctx, gid, rv)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	stack.Current = rv
-// 	g.setStack(stack)
-// 	return g, nil
-// }
-
-func (cl *GameClient[GT, G]) getGameFor(ctx *gin.Context, uid UID) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	gid := getID(ctx)
-	stack, err := cl.getStack(ctx, gid, uid)
-	if err != nil {
-		return nil, err
-	}
-
-	return cl.getGameWithStack(ctx, gid, uid, stack)
-}
-
-func (cl *GameClient[GT, G]) getGameWithStack(ctx *gin.Context, gid string, uid UID, stack *Stack) (g G, err error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	if stack.currentIsCached() {
-		g, err = cl.getCached(ctx, gid, uid, stack.Current)
-	} else {
-		g, err = cl.getRev(ctx, gid, stack.Current)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	g.setStack(stack)
-	return g, nil
-}
-
-func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, gid string, rev Rev) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	snap, err := cl.revDocRef(gid, rev).Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
-		return nil, err
-	}
-
-	g.setID(gid)
-	return g, nil
-}
-
-func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, gid string, uid UID, rev Rev) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	snap, err := cl.cachedDocRef(gid, uid, rev).Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	g := G(new(GT))
-	if err := snap.DataTo(g); err != nil {
-		return nil, err
-	}
-
-	g.setID(gid)
-	return g, nil
-}
-
-func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*index, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	snap, err := tx.Get(cl.indexDocRef(id))
-	if err != nil {
-		return nil, err
-	}
-
-	i := new(index)
-	if err := snap.DataTo(i); err != nil {
-		return nil, err
-	}
-
-	i.setID(id)
-	return i, nil
-}
-
-func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G, cu *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	if cu == nil {
-		return ErrUserNil
-	}
-
-	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txUpdateViews(tx, g, cu); err != nil {
-			return err
-		}
-
-		if err := cl.txSaveStack(tx, g, cu.ID); err != nil {
-			return err
-		}
-
-		return cl.txCacheRev(tx, g, cu)
-	})
-}
-
-func (cl *GameClient[GT, G]) txCacheRev(tx *firestore.Transaction, g G, cu *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	if cu == nil {
-		return ErrUserNil
-	}
-
-	return tx.Set(cl.cachedDocRef(g.id(), cu.ID, g.stack().Current), g)
+	return obj.UID, nil
 }
 
 func (g *Game[S, T, P]) updateStatsFor(pid PID) {
@@ -392,7 +97,7 @@ func (g *Game[S, T, P]) playerUIDS() []UID {
 
 // UIDForPID returns the player id associated with the user id
 func (g *Game[S, T, P]) UIDForPID(pid PID) UID {
-	if i := int(pid.ToUIndex()); i > 0 && i < len(g.Header.UserIDS)-1 {
+	if i := int(pid.ToUIndex()); i >= 0 && i < len(g.Header.UserIDS) {
 		return g.Header.UserIDS[i]
 	}
 	return noUID
@@ -437,26 +142,16 @@ func (g *Game[S, T, P]) PlayerByIndex(i int) P {
 	return g.Players[r]
 }
 
-// PIDS returns the player identiers for the players slice
-func (ps Players[T, P]) PIDS() []PID {
-	return pie.Map(ps, func(p P) PID { return p.PID() })
+// Compare implements Comparer interface.
+// Essentially, provides a fallback/default compare which ranks players
+// in descending order of score. In other words, the more a player scores
+// the earlier they are in finish order.
+func (g *Game[S, T, P]) Compare(pid1, pid2 PID) int {
+	return cmp.Compare(g.PlayerByPID(pid2).getScore(), g.PlayerByPID(pid1).getScore())
 }
 
-// IndexFor returns the index for the given player in Players slice
-// Also, return true if player found, and false if player not found in Players slice
-func (ps Players[T, P]) IndexFor(p1 P) (int, bool) {
-	const notFound = -1
-	const found = true
-	index := pie.FindFirstUsing(ps, func(p2 P) bool { return p1.PID() == p2.PID() })
-	if index == notFound {
-		return index, !found
-	}
-	return index, found
-}
-
-// Randomize randomizes the order of the players in the Players slice
-func (ps Players[T, P]) Randomize() {
-	rand.Shuffle(len(ps), func(i, j int) { ps[i], ps[j] = ps[j], ps[i] })
+func (g *Game[S, T, P]) sortPlayers(compare func(PID, PID) int) {
+	slices.SortFunc(g.Players, func(p1, p2 P) int { return compare(p1.PID(), p2.PID()) })
 }
 
 // RandomizePlayers randomizes the order of the players in the Players slice, and
@@ -517,11 +212,6 @@ func (g *Game[S, T, P]) RemoveFromCurrentPlayers(pids ...PID) {
 	g.Header.CPIDS, _ = pie.Diff(pids, g.Header.CPIDS)
 }
 
-func (g Game[S, T, P]) isCurrentPlayer(cu *User) bool {
-	_, found := g.CurrentPlayerFor(cu)
-	return found
-}
-
 // ValidatePlayerAction performs basic validations for determining whether provided user
 // can perform a player action. If user can perform player action, ValidatePlayerAction
 // returns player associated with user. Otherwise, ValidatePlayerAction returns an error.
@@ -559,23 +249,19 @@ func (g *Game[S, T, P]) ValidateCurrentPlayer(cu *User) (P, error) {
 // with a player (i.e., a player whose turn it is in the game) that can finish their turn.
 // If user can finish a turn, ValidateFinishTurn returns the associated player and their associate SubToken
 // Otherwise, ValidateFinishTurn returns their associated SubToken and error
-func (g *Game[S, T, P]) ValidateFinishTurn(ctx *gin.Context, cu *User) (P, SubToken, error) {
-	token, err := getToken(ctx)
-	if err != nil {
-		var zerop P
-		return zerop, token, err
-	}
+func (g *Game[S, T, P]) ValidateFinishTurn(ctx *gin.Context, p P) (SubToken, error) {
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
 
-	cp, err := g.ValidateCurrentPlayer(cu)
-	switch {
+	switch token, err := getToken(ctx); {
 	case err != nil:
-		return nil, token, err
-	case !cp.getPerformedAction():
-		return nil, token, fmt.Errorf("%s has yet to perform an action: %w", cu.Name, ErrValidation)
-	case !cp.getCanFinish():
-		return nil, token, fmt.Errorf("%s has performed an action, but has taken partial actions preventing a turn finish: %w", cu.Name, ErrValidation)
+		return "", err
+	case !p.getPerformedAction():
+		return "", fmt.Errorf("you have yet to perform an action: %w", ErrValidation)
+	case !p.getCanFinish():
+		return "", fmt.Errorf("you have performed an action, but have taken partial actions preventing a turn finish: %w", ErrValidation)
 	default:
-		return cp, token, nil
+		return token, nil
 	}
 }
 
@@ -623,55 +309,10 @@ func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
 	return zerop
 }
 
-func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, cu *User) {
+func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) (placesMap, placesSMap) {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)
 
-	places := g.setFinishOrder(g.Compare)
-	g.header().Status = Completed
-	g.header().EndedAt = timestamppb.Now()
-	g.header().Phase = "Game Over"
-
-	stats, err := cl.getUStats(ctx, g.header().UserIDS...)
-	if err != nil {
-		JErr(ctx, err)
-		return
-	}
-	stats = g.updateUStats(stats, g.playerStats(), g.playerUIDS())
-
-	oldElos, newElos, err := cl.updateElo(ctx, g.header().users(), places)
-	if err != nil {
-		JErr(ctx, err)
-		return
-	}
-
-	rs := g.getResults(oldElos, newElos)
-	g.newEntry("game-results", H{"Results": rs})
-
-	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCommit(tx, g, cu); err != nil {
-			return err
-		}
-
-		if err := cl.txSaveUStats(tx, stats); err != nil {
-			return err
-		}
-
-		return cl.txSaveElos(tx, newElos)
-	}); err != nil {
-		JErr(ctx, err)
-		return
-	}
-
-	if err := g.sendEndGameNotifications(rs); err != nil {
-		// log but otherwise ignore send errors
-		Warnf("%v", err.Error())
-	}
-	ctx.JSON(http.StatusOK, nil)
-
-}
-
-func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) placesMap {
 	// Set to no current player
 	g.SetCurrentPlayers()
 
@@ -703,7 +344,12 @@ func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) placesMap {
 
 	}
 
-	return places
+	places2 := make(placesSMap, len(places))
+	for id := range places {
+		places2[strconv.Itoa(int(id))] = places[id]
+	}
+
+	return places, places2
 }
 
 type result struct {
@@ -803,7 +449,9 @@ func endGameTemplate() (*template.Template, error) {
 }
 
 func (g *Game[S, T, P]) winnerNames() []string {
-	Debugf("WinnerIDS: %#v", g.Header.WinnerIDS)
+	Debugf(msgEnter)
+	defer Debugf(msgExit)
+
 	return pie.Map(g.Header.WinnerIDS, func(uid UID) string { return g.Header.NameFor(g.PlayerByUID(uid).PID()) })
 }
 
@@ -853,10 +501,12 @@ func (g *Game[S, T, P]) ViewFor(_ UID) *Game[S, T, P] {
 
 // DeepCopy provides a deep copy of the game
 func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
-	return deepCopy(g)
+	return DeepCopy(g)
 }
 
-func deepCopy[T any](obj T) T {
+// DeepCopy returns a deep copy of obj
+// obj must be suitable for marshalling via json.Marshal
+func DeepCopy[T any](obj T) T {
 	v, err := json.Marshal(obj)
 	if err != nil {
 		Errorf("unable to marshal object: %v", err)
@@ -892,13 +542,9 @@ func (g *Game[S, T, P]) setStack(s *Stack) {
 	g.header().Undo = *s
 }
 
-func (g *Game[S, T, P]) getIndex() *index {
+func (g *Game[S, T, P]) toIndex() *index {
 	return &index{
 		Header: *(g.header()),
 		Rev:    g.stack().Committed,
 	}
-}
-
-func (g *Game[S, T, P]) isPlayer(u *User) bool {
-	return u != nil && slices.Contains(g.header().UserIDS, u.ID)
 }

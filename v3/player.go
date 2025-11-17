@@ -1,8 +1,7 @@
 package sn
 
 import (
-	"cmp"
-	"slices"
+	"math/rand/v2"
 	"time"
 
 	"github.com/elliotchance/pie/v2"
@@ -122,14 +121,6 @@ type playerer[T any] interface {
 // Players represents players of the game
 type Players[T any, P playerer[T]] []P
 
-// UIndex represents a unique index value for a user
-type UIndex int
-
-// ToPID returns an id unique for the player associated with the user index value
-func (uIndex UIndex) ToPID() PID {
-	return PID(uIndex + 1)
-}
-
 // PID represent a unique id for a player
 type PID int
 
@@ -141,60 +132,24 @@ func (pid PID) ToUIndex() UIndex {
 // NoPID corresponds to the zero value for PID and represents the absence of a player id
 const NoPID PID = 0
 
-// NameFor returns the user name for the player associated with the player id
-func (h Header) NameFor(pid PID) string {
-	return h.UserNames[pid.ToUIndex()]
+// PIDS returns the player identiers for the players slice
+func (ps Players[T, P]) PIDS() []PID {
+	return pie.Map(ps, func(p P) PID { return p.PID() })
 }
 
-// UIDFor returns the user id for the player associated with the player id
-func (h Header) UIDFor(pid PID) UID {
-	return h.UserIDS[pid.ToUIndex()]
-}
-
-// PIDFor returns the player id for the user associated with the user id
-// If no user associated with player id, return 0
-func (h Header) PIDFor(uid UID) PID {
-	index, found := h.IndexFor(uid)
-	if !found {
-		return 0
-	}
-	return index.ToPID()
-}
-
-// IndexFor return the user index associated with the user id.
-// Also, returns a boolean indicating whether a user index was found for the user id.
-func (h Header) IndexFor(uid UID) (index UIndex, found bool) {
+// IndexFor returns the index for the given player in Players slice
+// Also, return true if player found, and false if player not found in Players slice
+func (ps Players[T, P]) IndexFor(p1 P) (int, bool) {
 	const notFound = -1
-	index = UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
+	const found = true
+	index := pie.FindFirstUsing(ps, func(p2 P) bool { return p1.PID() == p2.PID() })
 	if index == notFound {
-		return notFound, false
+		return index, !found
 	}
-	return index, true
+	return index, found
 }
 
-// EmailFor returns the user email for the player associated with the player id
-func (h Header) EmailFor(pid PID) string {
-	return h.UserEmails[pid.ToUIndex()]
-}
-
-// EmailNotificationsFor returns whether email notifications are to be sent for the player associated with the player id
-func (h Header) EmailNotificationsFor(pid PID) bool {
-	return h.UserEmailNotifications[pid.ToUIndex()]
-}
-
-// GravTypeFor returns the gravatar type for the player associated with the player id
-func (h Header) GravTypeFor(pid PID) string {
-	return h.UserGravTypes[pid.ToUIndex()]
-}
-
-func (g *Game[S, T, P]) sortPlayers(compare func(PID, PID) int) {
-	slices.SortFunc(g.Players, func(p1, p2 P) int { return compare(p1.PID(), p2.PID()) })
-}
-
-// Compare implements Comparer interface.
-// Essentially, provides a fallback/default compare which ranks players
-// in descending order of score. In other words, the more a player scores
-// the earlier they are in finish order.
-func (g *Game[S, T, P]) Compare(pid1, pid2 PID) int {
-	return cmp.Compare(g.PlayerByPID(pid2).getScore(), g.PlayerByPID(pid1).getScore())
+// Randomize randomizes the order of the players in the Players slice
+func (ps Players[T, P]) Randomize() {
+	rand.Shuffle(len(ps), func(i, j int) { ps[i], ps[j] = ps[j], ps[i] })
 }

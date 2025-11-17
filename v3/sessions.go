@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	firebase "firebase.google.com/go/v4"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -15,37 +14,16 @@ func init() {
 	gob.RegisterName("SessionToken", new(SessionToken))
 }
 
-func getFBToken(ctx *gin.Context, uid UID) (string, error) {
+func (cl *GameClient[GT, G]) getFBToken(ctx *gin.Context, uid UID, admin bool) (string, error) {
 	Debugf(msgEnter)
 	defer Debugf(msgEnter)
 
-	app, err := firebase.NewApp(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("error initializing app: %w", err)
-	}
-	client, err := app.Auth(ctx)
-	if err != nil {
-		return "", fmt.Errorf("error getting Auth client: %w", err)
-	}
-
-	token, err := client.CustomToken(ctx, uid.toString())
+	claims := map[string]interface{}{"admin": admin}
+	token, err := cl.Auth.CustomTokenWithClaims(ctx, uid.toString(), claims)
 	if err != nil {
 		return "", fmt.Errorf("error minting custom token: %w", err)
 	}
-
 	return token, err
-}
-
-func (cl *Client) getCUID(ctx *gin.Context) (UID, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
-	token := cl.GetSessionToken(ctx)
-	if token == nil {
-		return 0, ErrNotLoggedIn
-	}
-
-	return token.ID, nil
 }
 
 // ToUser returns a user from the session token
@@ -123,10 +101,6 @@ func (cl *Client) initSession(ctx context.Context) *Client {
 	}
 
 	store := cookie.NewStore(s.HashKey, s.BlockKey)
-	// opts := sessions.Options{
-	// 	Domain: "fake-slothninja.com",
-	// 	Path:   "/",
-	// }
 	if IsProduction() {
 		opts := sessions.Options{
 			Domain: "slothninja.com",

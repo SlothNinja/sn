@@ -300,14 +300,15 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		g := G(new(GT))
-		cpid := g.Start(inv.Header)
+		cpid, err := g.Start(inv.Header)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txSave(tx, g, cu); err != nil {
+			g.header().UpdatedAt = timestamppb.Now()
+			if err := cl.txSave(tx, g, cu.ID); err != nil {
 				return err
 			}
 			return cl.txDeleteInvitation(tx, inv.id())

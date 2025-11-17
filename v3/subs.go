@@ -221,6 +221,6 @@ type tokenInput struct {
 
 func getToken(ctx *gin.Context) (SubToken, error) {
 	input := new(tokenInput)
-	err := ctx.ShouldBind(input)
+	err := ctx.ShouldBindBodyWithJSON(input)
 	return input.Token, err
 }

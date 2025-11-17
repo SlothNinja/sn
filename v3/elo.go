@@ -46,6 +46,9 @@ func (cl *GameClient[GT, G]) eloHistoryRef(uid UID) *firestore.CollectionRef {
 type eloMap map[UID]elo
 type placesMap map[UID]int
 
+// Firestore only supports string values for map keys
+type placesSMap map[string]int
+
 func updateEloFor(uid1 UID, elos eloMap, places placesMap) int {
 	Debugf(msgEnter)
 	defer Debugf(msgExit)

@@ -1,6 +1,7 @@
 package sn
 
 import (
+	"github.com/elliotchance/pie/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,6 +32,7 @@ type Header struct {
 	OrderIDS                  []PID
 	CPIDS                     []PID
 	WinnerIDS                 []UID
+	Places                    placesSMap
 	Status                    Status
 	Undo                      Stack `firestore:"-"`
 	OptString                 string
@@ -59,19 +61,56 @@ func (h *Header) users() []*User {
 	return us
 }
 
-// func (h *Header) stack() *Stack {
-// 	return &(h.Undo)
-// }
-
-type index struct {
-	Header
-	Rev Rev
-}
-
 func (h *Header) id() string {
 	return h.ID
 }
 
 func (h *Header) setID(id string) {
 	h.ID = id
+}
+
+// EmailFor returns the user email for the player associated with the player id
+func (h Header) EmailFor(pid PID) string {
+	return h.UserEmails[pid.ToUIndex()]
+}
+
+// EmailNotificationsFor returns whether email notifications are to be sent for the player associated with the player id
+func (h Header) EmailNotificationsFor(pid PID) bool {
+	return h.UserEmailNotifications[pid.ToUIndex()]
+}
+
+// GravTypeFor returns the gravatar type for the player associated with the player id
+func (h Header) GravTypeFor(pid PID) string {
+	return h.UserGravTypes[pid.ToUIndex()]
+}
+
+// UIDFor returns the user id for the player associated with the player id
+func (h Header) UIDFor(pid PID) UID {
+	return h.UserIDS[pid.ToUIndex()]
+}
+
+// PIDFor returns the player id for the user associated with the user id
+// If no user associated with player id, return 0
+func (h Header) PIDFor(uid UID) PID {
+	index, found := h.IndexFor(uid)
+	if !found {
+		return 0
+	}
+	return index.ToPID()
+}
+
+// IndexFor return the user index associated with the user id.
+// Also, returns a boolean indicating whether a user index was found for the user id.
+func (h Header) IndexFor(uid UID) (index UIndex, found bool) {
+	const notFound = -1
+	index = UIndex(pie.FindFirstUsing(h.UserIDS, func(id UID) bool { return id == uid }))
+	if index == notFound {
+		return notFound, false
+	}
+	return index, true
+}
+
+// NameFor returns the user name for the player associated with the player id
+func (h Header) NameFor(pid PID) string {
+	return h.UserNames[pid.ToUIndex()]
 }
