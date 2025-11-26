@@ -36,8 +36,6 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 			return
 		}
 
-		Debugf("uid: %v", uid)
-
 		result, err := action(g, ctx, cu)
 		if err != nil {
 			JErr(ctx, err)

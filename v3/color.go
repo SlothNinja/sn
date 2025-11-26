@@ -5,7 +5,7 @@ type Color string
 
 const (
 	// Red color constant
-	Red Color = "red12"
+	Red Color = "red"
 
 	// Yellow color constant
 	Yellow Color = "yellow"
