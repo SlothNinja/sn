@@ -82,6 +82,9 @@ func getUID(ctx *gin.Context) (UID, error) {
 	if err := ctx.ShouldBindBodyWithJSON(&obj); err != nil {
 		return 0, err
 	}
+	if obj.UID == noUID {
+		return 0, fmt.Errorf("uid cannot be zero: %w", ErrValidation)
+	}
 	return obj.UID, nil
 }
 
@@ -189,7 +192,7 @@ func (g *Game[S, T, P]) CurrentPlayerFor(u *User) (P, bool) {
 
 	const notFound = -1
 	if index == notFound {
-		if u.GodMode && len(ps) == 1 {
+		if u.GodMode {
 			return ps[0], true
 		}
 		return zerop, false

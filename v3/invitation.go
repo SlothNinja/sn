@@ -54,7 +54,8 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, nil)
+		msg := fmt.Sprintf("%s has been aborted.", inv.Title)
+		ctx.JSON(http.StatusOK, H{"Message": msg})
 	}
 }
 

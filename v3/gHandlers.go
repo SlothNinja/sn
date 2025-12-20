@@ -345,9 +345,6 @@ func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, Rev) bool) gin.Hand
 			return
 		}
 
-		Debugf("rev: %v", obj.Rev)
-		Debugf("stack: %#v", stack)
-
 		// do nothing if stack does not change
 		if !update(stack, obj.Rev) {
 			ctx.JSON(http.StatusOK, nil)
