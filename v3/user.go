@@ -34,8 +34,8 @@ type userData struct {
 
 func (cl *Client) cuHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -49,8 +49,8 @@ func (cl *Client) cuHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) fbCUHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -66,7 +66,7 @@ func (cl *GameClient[GT, G]) fbCUHandler() gin.HandlerFunc {
 
 		token, err := cl.getFBToken(ctx, cu.ID, cu.Admin)
 		if err != nil {
-			Warnf("%v", err.Error())
+			Warnf(ctx, "%v", err.Error())
 			ctx.JSON(http.StatusOK, gin.H{"CU": cu})
 			return
 		}
@@ -76,8 +76,8 @@ func (cl *GameClient[GT, G]) fbCUHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) updateGodModeHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		token := cl.GetSessionToken(ctx)
 		if token == nil {

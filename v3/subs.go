@@ -47,8 +47,8 @@ func (cl *GameClient[GT, G]) subInvDocRef(id string, uid UID) *firestore.Documen
 }
 
 func (cl *GameClient[GT, G]) addSub(ctx *gin.Context, gid string, token SubToken, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if token == "" {
 		return nil
@@ -56,7 +56,7 @@ func (cl *GameClient[GT, G]) addSub(ctx *gin.Context, gid string, token SubToken
 
 	t := time.Now()
 	newSubs := &subscriptions{
-		Subs: []subscription{subscription{Token: token, Time: t}},
+		Subs: []subscription{{Token: token, Time: t}},
 		Time: t,
 	}
 	_, err := cl.subInvDocRef(gid, uid).Set(ctx, newSubs)
@@ -64,8 +64,8 @@ func (cl *GameClient[GT, G]) addSub(ctx *gin.Context, gid string, token SubToken
 }
 
 func (cl *GameClient[GT, G]) removeSubs(ctx *gin.Context, gid string, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	k := subscriptionKey(gid, uid)
 	cl.Cache.Delete(k)
@@ -74,8 +74,8 @@ func (cl *GameClient[GT, G]) removeSubs(ctx *gin.Context, gid string, uid UID) e
 }
 
 func (cl *GameClient[GT, G]) updateSubs(ctx *gin.Context, gid string, token SubToken, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if token == "" {
 		return nil
@@ -127,9 +127,9 @@ func (cl *GameClient[GT, G]) updateSubs(ctx *gin.Context, gid string, token SubT
 }
 
 // mcGetSubscription attempts to pull subscriptoin tokens from cache
-func (cl *GameClient[GT, G]) mcGetSubscriptions(gid string, uid UID) (*subscriptions, bool) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (cl *GameClient[GT, G]) mcGetSubscriptions(ctx context.Context, gid string, uid UID) (*subscriptions, bool) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	k := subscriptionKey(gid, uid)
 
@@ -148,8 +148,8 @@ func (cl *GameClient[GT, G]) mcGetSubscriptions(gid string, uid UID) (*subscript
 
 // dsGetSubscriptions attempts to pull datastore
 func (cl *GameClient[GT, G]) dsGetSubscriptions(ctx context.Context, gid string, uid UID) (*subscriptions, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.subDocRef(gid, uid).Get(ctx)
 	if err != nil {
@@ -168,10 +168,10 @@ func (cl *GameClient[GT, G]) dsGetSubscriptions(ctx context.Context, gid string,
 }
 
 func (cl *GameClient[GT, G]) getSubscriptions(ctx context.Context, gid string, uid UID) (*subscriptions, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	subs, found := cl.mcGetSubscriptions(gid, uid)
+	subs, found := cl.mcGetSubscriptions(ctx, gid, uid)
 	if found {
 		return subs, nil
 	}
@@ -180,8 +180,8 @@ func (cl *GameClient[GT, G]) getSubscriptions(ctx context.Context, gid string, u
 }
 
 func (cl *GameClient[GT, G]) getTokenStrings(ctx context.Context, gid string, uids []UID) ([]string, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	var tokens []string
 	for _, uid := range uids {
@@ -198,8 +198,8 @@ func (cl *GameClient[GT, G]) getTokenStrings(ctx context.Context, gid string, ui
 }
 
 func (cl *GameClient[GT, G]) putSubscriptions(ctx context.Context, gid string, uid UID, subs *subscriptions) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	_, err := cl.subDocRef(gid, uid).Set(ctx, subs)
 	if err != nil {

@@ -56,7 +56,7 @@ func (cl *GameClient[GT, G]) ustatDocRef(uid UID) *firestore.DocumentRef {
 }
 
 func (g *Game[S, T, P]) updateUStats(stats []ustat, pstats []*Stats, uids []UID) []ustat {
-	var ustats = make([]ustat, len(stats))
+	ustats := make([]ustat, len(stats))
 	for i := range stats {
 		ustats[i] = g.updateUStat(stats[i], pstats[i], uids[i])
 	}
@@ -90,8 +90,8 @@ func (g *Game[S, T, P]) updateUStat(stat ustat, pstats *Stats, uid UID) ustat {
 }
 
 func (cl *GameClient[GT, G]) getUStats(ctx *gin.Context, uids ...UID) ([]ustat, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	refs := pie.Map(uids, func(uid UID) *firestore.DocumentRef { return cl.ustatDocRef(uid) })
 	snaps, err := cl.FS.GetAll(ctx, refs)

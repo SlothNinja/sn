@@ -3,6 +3,7 @@ package sn
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -38,8 +39,8 @@ type Gamer[G any] interface {
 	playerStats() []*Stats
 	playerUIDS() []UID
 	ptr[G]
-	getResults([]elo, []elo) results
-	sendEndGameNotifications(results) error
+	getResults(context.Context, []elo, []elo) results
+	sendEndGameNotifications(context.Context, results) error
 	setCurrentPlayerers
 	setFinishOrder(compareFunc) (placesMap, placesSMap)
 	starter
@@ -66,7 +67,7 @@ type Comparer interface {
 }
 
 type starter interface {
-	Start(Header) (PID, error)
+	Start(context.Context, Header) (PID, error)
 }
 
 type setCurrentPlayerers interface {
@@ -177,9 +178,9 @@ func (g *Game[S, T, P]) CurrentPlayer() P {
 // CurrentPlayerFor returns player asssociated with user if such player is current player
 // CurrentPlayerFor also returns true if player asssociated with user is found.
 // Otherwise, returns false.
-func (g *Game[S, T, P]) CurrentPlayerFor(u *User) (P, bool) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (g *Game[S, T, P]) CurrentPlayerFor(ctx context.Context, u *User) (P, bool) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	var zerop P
 	if u == nil {
@@ -218,11 +219,11 @@ func (g *Game[S, T, P]) RemoveFromCurrentPlayers(pids ...PID) {
 // ValidatePlayerAction performs basic validations for determining whether provided user
 // can perform a player action. If user can perform player action, ValidatePlayerAction
 // returns player associated with user. Otherwise, ValidatePlayerAction returns an error.
-func (g *Game[S, T, P]) ValidatePlayerAction(cu *User) (P, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (g *Game[S, T, P]) ValidatePlayerAction(ctx context.Context, cu *User) (P, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	cp, err := g.ValidateCurrentPlayer(cu)
+	cp, err := g.ValidateCurrentPlayer(ctx, cu)
 	switch {
 	case err != nil:
 		return cp, err
@@ -237,11 +238,11 @@ func (g *Game[S, T, P]) ValidatePlayerAction(cu *User) (P, error) {
 // with a current player (i.e., a player whose turn it is in the game).
 // If user is associated with current player, ValidateCurrentPlayer returns the associated player
 // Otherwise, ValidateCurrentPlayer returns an error
-func (g *Game[S, T, P]) ValidateCurrentPlayer(cu *User) (P, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (g *Game[S, T, P]) ValidateCurrentPlayer(ctx context.Context, cu *User) (P, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	cp, found := g.CurrentPlayerFor(cu)
+	cp, found := g.CurrentPlayerFor(ctx, cu)
 	if !found {
 		return cp, ErrPlayerNotFound
 	}
@@ -253,8 +254,8 @@ func (g *Game[S, T, P]) ValidateCurrentPlayer(cu *User) (P, error) {
 // If user can finish a turn, ValidateFinishTurn returns the associated player and their associate SubToken
 // Otherwise, ValidateFinishTurn returns their associated SubToken and error
 func (g *Game[S, T, P]) ValidateFinishTurn(ctx *gin.Context, p P) (SubToken, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	switch token, err := getToken(ctx); {
 	case err != nil:
@@ -293,9 +294,6 @@ func (g *Game[S, T, P]) UIDSForPIDS(pids []PID) []UID {
 // NextPlayer returns player after cp that satisfies all tests ts
 // if tests ts is empty, return player after cp
 func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	start := g.IndexForPlayer(cp) + 1
 	stop := start + g.Header.NumPlayers
 
@@ -313,9 +311,6 @@ func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
 }
 
 func (g *Game[S, T, P]) setFinishOrder(compare compareFunc) (placesMap, placesSMap) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	// Set to no current player
 	g.SetCurrentPlayers()
 
@@ -370,9 +365,9 @@ func (g *Game[S, T, P]) UpdateOrder() {
 
 type results []result
 
-func (g *Game[S, T, P]) getResults(oldElos, newElos []elo) results {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (g *Game[S, T, P]) getResults(ctx context.Context, oldElos, newElos []elo) results {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	rs := make(results, g.Header.NumPlayers)
 
@@ -389,9 +384,9 @@ func (g *Game[S, T, P]) getResults(oldElos, newElos []elo) results {
 	return rs
 }
 
-func (g *Game[S, T, P]) sendEndGameNotifications(rs results) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (g *Game[S, T, P]) sendEndGameNotifications(ctx context.Context, rs results) error {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	buf := new(bytes.Buffer)
 	tmpl, err := endGameTemplate()
@@ -426,7 +421,7 @@ func (g *Game[S, T, P]) sendEndGameNotifications(rs results) error {
 			HTMLPart: body,
 		}
 	}
-	_, err = SendMessages(ms...)
+	_, err = SendMessages(ctx, ms...)
 	return err
 }
 
@@ -452,9 +447,6 @@ func endGameTemplate() (*template.Template, error) {
 }
 
 func (g *Game[S, T, P]) winnerNames() []string {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	return pie.Map(g.Header.WinnerIDS, func(uid UID) string { return g.Header.NameFor(g.PlayerByUID(uid).PID()) })
 }
 
@@ -466,9 +458,6 @@ func (g *Game[S, T, P]) addNewPlayers() {
 }
 
 func (g *Game[S, T, P]) newPlayer(i int) P {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	p2 := P(new(T))
 	p2.setPID(PID(i + 1))
 	return p2
@@ -476,9 +465,6 @@ func (g *Game[S, T, P]) newPlayer(i int) P {
 
 // Start provides initial game setup and starts play of the game.
 func (g *Game[S, T, P]) Start(h Header) PID {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	g.Header = h
 	g.Header.Status = Running
 
@@ -490,10 +476,7 @@ func (g *Game[S, T, P]) Start(h Header) PID {
 }
 
 // Views implements part of Viewer interface
-func (g *Game[S, T, P]) Views() ([]UID, []*Game[S, T, P]) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
+func (g *Game[S, T, P]) Views(ctx context.Context) ([]UID, []*Game[S, T, P]) {
 	return []UID{0}, []*Game[S, T, P]{g.ViewFor(0)}
 }
 
@@ -512,14 +495,12 @@ func (g *Game[S, T, P]) DeepCopy() *Game[S, T, P] {
 func DeepCopy[T any](obj T) T {
 	v, err := json.Marshal(obj)
 	if err != nil {
-		Errorf("unable to marshal object: %v", err)
 		panic("unable to marshal object")
 	}
 
 	var obj2 T
 	err = json.Unmarshal(v, &obj2)
 	if err != nil {
-		Errorf("unable to unmarshal object: %v", err)
 		panic("unable to unmarshal object")
 	}
 	return obj2

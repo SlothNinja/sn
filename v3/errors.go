@@ -30,10 +30,10 @@ var (
 // Error message returned with a 'Message' key if a validation error
 // Error message returned with a 'Error' key if another type of error
 func JErr(ctx *gin.Context, err error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	Debugf("%v", err.Error())
+	Debugf(ctx, "%v", err.Error())
 	if errors.Is(err, ErrValidation) {
 		ctx.JSON(http.StatusOK, gin.H{"Message": strings.TrimSuffix(err.Error(), ": "+ErrValidation.Error())})
 		return

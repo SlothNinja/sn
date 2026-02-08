@@ -109,8 +109,8 @@ func (cl *GameClient[GT, G]) stackDocRef(gid string, uid UID) *firestore.Documen
 }
 
 func (cl *GameClient[GT, G]) getStack(ctx context.Context, gid string, uid UID) (*Stack, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.stackDocRef(gid, uid).Get(ctx)
 	if err != nil {

@@ -16,8 +16,8 @@ func IsProduction() bool {
 // RequireLogin returns the logged in User
 // Otherwise, returns error
 func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	token := cl.GetSessionToken(ctx)
 	if token == nil {
@@ -30,8 +30,8 @@ func (cl *Client) RequireLogin(ctx *gin.Context) (*User, error) {
 // RequireAdmin returns the logged in user if user is admin
 // Otherwise, returns an error
 func (cl *Client) RequireAdmin(ctx *gin.Context) (*User, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	token := cl.GetSessionToken(ctx)
 	if token == nil {

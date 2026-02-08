@@ -61,32 +61,32 @@ func getStackLogLevel() slog.Level {
 }
 
 // Debugf provides formatted debug messages
-func Debugf(format string, args ...any) {
-	logf(slog.LevelDebug, format, args...)
+func Debugf(ctx context.Context, format string, args ...any) {
+	logf(ctx, slog.LevelDebug, format, args...)
 }
 
 // Infof provides formatted debug messages
-func Infof(format string, args ...any) {
-	logf(slog.LevelInfo, format, args...)
+func Infof(ctx context.Context, format string, args ...any) {
+	logf(ctx, slog.LevelInfo, format, args...)
 }
 
 // Warnf provides formatted debug messages
-func Warnf(format string, args ...any) {
-	logf(slog.LevelWarn, format, args...)
+func Warnf(ctx context.Context, format string, args ...any) {
+	logf(ctx, slog.LevelWarn, format, args...)
 }
 
 // Errorf provides formatted debug messages
-func Errorf(format string, args ...any) {
-	logf(slog.LevelError, format, args...)
+func Errorf(ctx context.Context, format string, args ...any) {
+	logf(ctx, slog.LevelError, format, args...)
 }
 
-func logf(level slog.Level, format string, args ...any) {
+func logf(ctx context.Context, level slog.Level, format string, args ...any) {
 	logger := slog.Default()
-	if !logger.Enabled(context.Background(), slog.LevelDebug) {
+	if !logger.Enabled(ctx, slog.LevelDebug) {
 		return
 	}
 
 	pc, _, _, _ := runtime.Caller(2)
 	r := slog.NewRecord(time.Now(), level, fmt.Sprintf(format, args...), pc)
-	_ = logger.Handler().Handle(context.Background(), r)
+	_ = logger.Handler().Handle(ctx, r)
 }

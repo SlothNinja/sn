@@ -15,8 +15,8 @@ func init() {
 }
 
 func (cl *GameClient[GT, G]) getFBToken(ctx *gin.Context, uid UID, admin bool) (string, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgEnter)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgEnter)
 
 	claims := map[string]interface{}{"admin": admin}
 	token, err := cl.Auth.CustomTokenWithClaims(ctx, uid.toString(), claims)
@@ -44,8 +44,8 @@ type SessionToken struct {
 
 // SetSessionToken creates and stores a new session token for user and its associated subscription
 func (cl *Client) setSessionToken(ctx *gin.Context, t *SessionToken) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if t == nil {
 		return
@@ -56,8 +56,8 @@ func (cl *Client) setSessionToken(ctx *gin.Context, t *SessionToken) {
 
 // SetSessionToken creates and stores a new session token for user and its associated subscription
 func (cl *Client) SetSessionToken(ctx *gin.Context, u *User, sub string) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if u == nil {
 		return
@@ -92,8 +92,8 @@ func (cl *Client) Session(ctx *gin.Context) sessions.Session {
 
 // NewStore generates a new secure cookie store
 func (cl *Client) initSession(ctx context.Context) *Client {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	s, err := cl.getSessionSecrets(ctx)
 	if err != nil {

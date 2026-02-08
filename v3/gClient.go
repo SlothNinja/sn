@@ -22,8 +22,8 @@ type GameClient[GT any, G Gamer[GT]] struct {
 
 // NewGameClient returns a new game service client
 func NewGameClient[GT any, G Gamer[GT]](ctx context.Context, opts ...Option) (*GameClient[GT, G], error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 	cl := &GameClient[GT, G]{Client: NewClient(ctx, opts...)}
 
 	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: cl.projectID})
@@ -47,8 +47,8 @@ func NewGameClient[GT any, G Gamer[GT]](ctx context.Context, opts ...Option) (*G
 }
 
 func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, u *User) (G, UID, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	uid := u.ID
 	if u.GodMode {
@@ -69,8 +69,8 @@ func (cl *GameClient[GT, G]) getGame(ctx *gin.Context, u *User) (G, UID, error) 
 }
 
 func (cl *GameClient[GT, G]) getGameWithStack(ctx *gin.Context, gid string, uid UID, stack *Stack) (g G, err error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if stack.currentIsCached() {
 		g, err = cl.getCached(ctx, gid, uid, stack.Current)
@@ -86,8 +86,8 @@ func (cl *GameClient[GT, G]) getGameWithStack(ctx *gin.Context, gid string, uid 
 }
 
 func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, gid string, rev Rev) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.revDocRef(gid, rev).Get(ctx)
 	if err != nil {
@@ -104,8 +104,8 @@ func (cl *GameClient[GT, G]) getRev(ctx *gin.Context, gid string, rev Rev) (G, e
 }
 
 func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, gid string, uid UID, rev Rev) (G, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.cachedDocRef(gid, uid, rev).Get(ctx)
 	if err != nil {
@@ -122,8 +122,8 @@ func (cl *GameClient[GT, G]) getCached(ctx *gin.Context, gid string, uid UID, re
 }
 
 func (cl *GameClient[GT, G]) getIndex(ctx *gin.Context, id string) (*index, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.indexDocRef(id).Get(ctx)
 	if err != nil {
@@ -139,9 +139,9 @@ func (cl *GameClient[GT, G]) getIndex(ctx *gin.Context, id string) (*index, erro
 	return i, nil
 }
 
-func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*index, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (cl *GameClient[GT, G]) txGetIndex(ctx context.Context, tx *firestore.Transaction, id string) (*index, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := tx.Get(cl.indexDocRef(id))
 	if err != nil {
@@ -158,36 +158,36 @@ func (cl *GameClient[GT, G]) txGetIndex(tx *firestore.Transaction, id string) (*
 }
 
 func (cl *GameClient[GT, G]) cacheRev(ctx *gin.Context, g G, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	return cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txUpdateViews(tx, g, uid); err != nil {
+		if err := cl.txUpdateViews(ctx, tx, g, uid); err != nil {
 			return err
 		}
 
-		if err := cl.txSaveStack(tx, g, uid); err != nil {
+		if err := cl.txSaveStack(ctx, tx, g, uid); err != nil {
 			return err
 		}
 
-		if err := cl.txSaveStack(tx, g, uid); err != nil {
+		if err := cl.txSaveStack(ctx, tx, g, uid); err != nil {
 			return err
 		}
 
-		return cl.txCacheRev(tx, g, uid)
+		return cl.txCacheRev(ctx, tx, g, uid)
 	})
 }
 
-func (cl *GameClient[GT, G]) txCacheRev(tx *firestore.Transaction, g G, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (cl *GameClient[GT, G]) txCacheRev(ctx context.Context, tx *firestore.Transaction, g G, uid UID) error {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	return tx.Set(cl.cachedDocRef(g.id(), uid, g.stack().Current), g)
 }
 
 func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, uid UID) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	places, placesSMap := g.setFinishOrder(g.Compare)
 	g.header().Status = Completed
@@ -206,11 +206,11 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, uid UID) error {
 		return err
 	}
 
-	rs := g.getResults(oldElos, newElos)
+	rs := g.getResults(ctx, oldElos, newElos)
 	g.newEntry("game-results", H{"Results": rs})
 
 	if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		if err := cl.txCommit(tx, g, uid); err != nil {
+		if err := cl.txCommit(ctx, tx, g, uid); err != nil {
 			return err
 		}
 
@@ -223,9 +223,9 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, uid UID) error {
 		return err
 	}
 
-	if err := g.sendEndGameNotifications(rs); err != nil {
+	if err := g.sendEndGameNotifications(ctx, rs); err != nil {
 		// log but otherwise ignore send errors
-		Warnf("%v", err.Error())
+		Warnf(ctx, "%v", err.Error())
 	}
 	return nil
 }

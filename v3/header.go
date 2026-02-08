@@ -57,7 +57,6 @@ func (h *Header) users() []*User {
 			},
 		}
 	}
-	Debugf("Users: %#v", us)
 	return us
 }
 

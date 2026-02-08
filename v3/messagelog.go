@@ -69,8 +69,8 @@ func (cl *GameClient[GT, G]) updateRead(ctx *gin.Context, uid UID, read []string
 }
 
 func getRead(ctx *gin.Context) ([]string, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	var obj struct {
 		Read []string
@@ -85,8 +85,8 @@ type message struct {
 }
 
 func getMessage(ctx *gin.Context) (*message, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	obj := new(message)
 	if err := ctx.ShouldBind(obj); err != nil {
@@ -97,8 +97,8 @@ func getMessage(ctx *gin.Context) (*message, error) {
 
 func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -121,8 +121,8 @@ func (cl *GameClient[GT, G]) addMessageHandler() gin.HandlerFunc {
 }
 
 func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context, cu *User) (*message, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	m, err := getMessage(ctx)
 	if err != nil {
@@ -136,8 +136,8 @@ func (cl *GameClient[GT, G]) validateAddMessage(ctx *gin.Context, cu *User) (*me
 }
 
 func (cl *GameClient[GT, G]) addMessage(ctx *gin.Context, m Message) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	_, err := cl.messagesCollectionRef(getID(ctx)).NewDoc().Create(ctx, m)
 	return err

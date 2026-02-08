@@ -40,7 +40,9 @@ func (g *Game[S, T, P]) NewEntryFor(p P, template string, data H) {
 
 func (g *Game[S, T, P]) newEntryFor(p P, template string, data H) {
 	g.NewEntry(template, data)
-	p.setLog(g.lastEntry())
+	if p != nil {
+		p.setLog(g.lastEntry())
+	}
 }
 
 // UpdateLastEntry updates the last log entry in the game log

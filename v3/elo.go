@@ -1,6 +1,7 @@
 package sn
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -43,15 +44,17 @@ func (cl *GameClient[GT, G]) eloHistoryRef(uid UID) *firestore.CollectionRef {
 	return cl.eloDocRef(uid).Collection("History")
 }
 
-type eloMap map[UID]elo
-type placesMap map[UID]int
+type (
+	eloMap    map[UID]elo
+	placesMap map[UID]int
+)
 
 // Firestore only supports string values for map keys
 type placesSMap map[string]int
 
-func updateEloFor(uid1 UID, elos eloMap, places placesMap) int {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func updateEloFor(ctx context.Context, uid1 UID, elos eloMap, places placesMap) int {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	var delta int
 	elo := elogo.NewElo()
@@ -86,8 +89,8 @@ func (cl *GameClient[GT, G]) txSaveElos(tx *firestore.Transaction, elos []elo) e
 }
 
 func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, us ...*User) ([]elo, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	refs := pie.Map(us, func(u *User) *firestore.DocumentRef { return cl.eloDocRef(u.ID) })
 	snaps, err := cl.FS.GetAll(ctx, refs)
@@ -114,8 +117,8 @@ func (cl *GameClient[GT, G]) getElos(ctx *gin.Context, us ...*User) ([]elo, erro
 // Update pulls current Elo from db and provides rating updates and deltas per results for users associated with uids.
 // Returns ratings, updates, and current Elo (not updated) in same order as supplied uids
 func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, us []*User, places placesMap) ([]elo, []elo, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	oldElos, err := cl.getElos(ctx, us...)
 	if err != nil {
@@ -135,7 +138,7 @@ func (cl *GameClient[GT, G]) updateElo(ctx *gin.Context, us []*User, places plac
 			Name:      u.Name,
 			EmailHash: u.EmailHash,
 			GravType:  u.GravType,
-			Rating:    updateEloFor(u.ID, eloMap, places),
+			Rating:    updateEloFor(ctx, u.ID, eloMap, places),
 			UpdatedAt: t,
 		}
 	}

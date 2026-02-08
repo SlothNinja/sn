@@ -13,9 +13,9 @@ func getMJKeys() (string, string) {
 }
 
 // SendMessages sends email messages
-func SendMessages(msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func SendMessages(ctx context.Context, msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	pub, priv := getMJKeys()
 	mailjetClient := mailjet.NewMailjetClient(pub, priv)
@@ -24,14 +24,14 @@ func SendMessages(msgInfo ...mailjet.InfoMessagesV31) (*mailjet.ResultsV31, erro
 		return mailjetClient.SendMailV31(&msgs)
 	}
 	for _, msg := range msgInfo {
-		Debugf("sent message: %#v", msg)
+		Debugf(ctx, "sent message: %#v", msg)
 	}
 	return nil, nil
 }
 
 func (cl *GameClient[GT, G]) sendNotifications(ctx context.Context, g G, pids []PID) (*messaging.BatchResponse, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if len(pids) == 0 {
 		return nil, nil

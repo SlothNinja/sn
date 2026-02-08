@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
@@ -21,8 +22,8 @@ type ActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (Result, error
 // CachedHandler provides a general purpose handler for performing cached game actions
 func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -50,7 +51,8 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 		}
 
 		if len(result.Message) > 0 {
-			ctx.JSON(http.StatusOK, H{"Message": result.Message})
+			ctx.JSON(http.StatusOK, gin.H{"Message": strings.TrimSpace(result.Message)})
+			return
 		}
 
 		ctx.JSON(http.StatusOK, nil)
@@ -60,8 +62,8 @@ func (cl *GameClient[GT, G]) CachedHandler(action ActionFunc[GT, G]) gin.Handler
 // CommitHandler provides a general purpose handler for performing saved game actions
 func (cl *GameClient[GT, G]) CommitHandler(action ActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -110,8 +112,8 @@ type FinishTurnActionFunc[GT any, G Gamer[GT]] func(G, *gin.Context, *User) (Fin
 // FinishTurnHandler provides a general purpose handler for performing finish turn actions
 func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G]) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -151,14 +153,14 @@ func (cl *GameClient[GT, G]) FinishTurnHandler(action FinishTurnActionFunc[GT, G
 
 		go func() {
 			if err := cl.updateSubs(ctx, g.id(), result.Token, cu.ID); err != nil {
-				Warnf("attempted to update sub: %q: %v", result.Token, err)
+				Warnf(ctx, "attempted to update sub: %q: %v", result.Token, err)
 			}
 
 			response, err := cl.sendNotifications(ctx, g, notify)
 			if err != nil {
-				Warnf("attempted to send notifications to: %v: %v", result.NextPlayerIDS, err)
+				Warnf(ctx, "attempted to send notifications to: %v: %v", result.NextPlayerIDS, err)
 			}
-			Warnf("batch send response: %v", response)
+			Warnf(ctx, "batch send response: %v", response)
 		}()
 
 		if len(result.Message) > 0 {
@@ -186,8 +188,8 @@ func (cl *GameClient[GT, G]) redoHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -226,10 +228,10 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 		g.header().UpdatedAt = timestamppb.Now()
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-			if err := cl.txUpdateViews(tx, g, uid); err != nil {
+			if err := cl.txUpdateViews(ctx, tx, g, uid); err != nil {
 				return err
 			}
-			return cl.txSaveStack(tx, g, uid)
+			return cl.txSaveStack(ctx, tx, g, uid)
 		}); err != nil {
 			JErr(ctx, err)
 			return
@@ -240,8 +242,8 @@ func (cl *GameClient[GT, G]) stackHandler(update func(*Stack) bool) gin.HandlerF
 }
 
 func (cl *GameClient[GT, G]) abandonHandler(ctx *gin.Context) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	cu, err := cl.RequireAdmin(ctx)
 	if err != nil {
@@ -273,8 +275,8 @@ func (cl *GameClient[GT, G]) abandonHandler(ctx *gin.Context) {
 }
 
 func (cl *GameClient[GT, G]) reviveHandler(ctx *gin.Context) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	cu, err := cl.RequireAdmin(ctx)
 	if err != nil {
@@ -315,8 +317,8 @@ func (cl *GameClient[GT, G]) rollforwardHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) rollHandler(update func(*Stack, Rev) bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireAdmin(ctx)
 		if err != nil {

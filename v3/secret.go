@@ -25,10 +25,10 @@ type sessionSecret struct {
 }
 
 func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	s, found := cl.mcGetSessionSecrets()
+	s, found := cl.mcGetSessionSecrets(ctx)
 	if found {
 		return s, nil
 	}
@@ -38,14 +38,14 @@ func (cl *Client) getSessionSecrets(ctx context.Context) (*sessionSecret, error)
 		return s, err
 	}
 
-	Debugf("generated new secrets")
+	Debugf(ctx, "generated new secrets")
 	return cl.updateSessionSecrets(ctx)
 }
 
 // mcGet attempts to pull secret from cache
-func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (cl *Client) mcGetSessionSecrets(ctx context.Context) (*sessionSecret, bool) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	k := secretsKey().Encode()
 
@@ -64,8 +64,8 @@ func (cl *Client) mcGetSessionSecrets() (*sessionSecret, bool) {
 
 // dsGet attempt to pull secret from datastore
 func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	secretsDS, err := cl.getSessionSecretsDatastore(ctx)
 	if err != nil {
@@ -83,11 +83,11 @@ func (cl *Client) dsGetSessionSecrets(ctx context.Context) (*sessionSecret, erro
 	return s, err
 }
 
-func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (cl *Client) updateSessionSecrets(ctx context.Context) (*sessionSecret, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	secretsDS, err := cl.getSessionSecretsDatastore(c)
+	secretsDS, err := cl.getSessionSecretsDatastore(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get secrets datastore: %v", err)
 	}
@@ -97,13 +97,13 @@ func (cl *Client) updateSessionSecrets(c context.Context) (*sessionSecret, error
 		return nil, err
 	}
 
-	_, err = secretsDS.Put(c, secretsKey(), s)
+	_, err = secretsDS.Put(ctx, secretsKey(), s)
 	return s, err
 }
 
 func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	if IsProduction() {
 		return cl.getProductionSessionSecretsDatastore(ctx)
@@ -112,15 +112,15 @@ func (cl *Client) getSessionSecretsDatastore(ctx context.Context) (*datastore.Cl
 }
 
 func (cl *Client) getProductionSessionSecretsDatastore(ctx context.Context) (*datastore.Client, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	return datastore.NewClient(ctx, cl.secretsProjectID)
 }
 
 func (cl *Client) getDevelopmentSessionSecretsDataStore(ctx context.Context) (*datastore.Client, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	return datastore.NewClient(
 		ctx,

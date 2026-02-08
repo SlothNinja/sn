@@ -31,8 +31,8 @@ func (cl *GameClient[GT, G]) hashDocRef(id string) *firestore.DocumentRef {
 
 func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		if _, err := cl.RequireAdmin(ctx); err != nil {
 			JErr(ctx, err)
@@ -60,8 +60,8 @@ func (cl *GameClient[GT, G]) abortHandler() gin.HandlerFunc {
 }
 
 func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	var inv invitation
 
@@ -80,8 +80,8 @@ func (cl *GameClient[GT, G]) getInvitation(ctx *gin.Context) (invitation, error)
 }
 
 func (cl *GameClient[GT, G]) getHash(ctx context.Context, id string) ([]byte, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	snap, err := cl.hashDocRef(id).Get(ctx)
 	if err != nil {
@@ -120,8 +120,8 @@ func (cl *GameClient[GT, G]) txDeleteInvitation(tx *firestore.Transaction, id st
 
 func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		var inv invitation
 		inv.Title = randomdata.SillyName()
@@ -132,8 +132,8 @@ func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 
 func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -167,7 +167,7 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.updateSubs(ctx, inv.id(), token, cu.ID); err != nil {
-			Warnf("attempted to update sub: %q: %v", token, err)
+			Warnf(ctx, "attempted to update sub: %q: %v", token, err)
 		}
 
 		inv2 := inv
@@ -180,8 +180,8 @@ func (cl *GameClient[GT, G]) createInvitationHandler() gin.HandlerFunc {
 }
 
 func fromForm(ctx *gin.Context, cu *User) (invitation, []byte, SubToken, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	obj := struct {
 		Type       Type
@@ -223,8 +223,8 @@ func fromForm(ctx *gin.Context, cu *User) (invitation, []byte, SubToken, error) 
 
 func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		cu, err := cl.RequireLogin(ctx)
 		if err != nil {
@@ -258,14 +258,14 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			return
 		}
 
-		start, err := inv.acceptWith(cu, []byte(obj.Password), hash)
+		start, err := inv.acceptWith(ctx, cu, []byte(obj.Password), hash)
 		if err != nil {
 			JErr(ctx, err)
 			return
 		}
 
 		if _, err := cl.FCM.SubscribeToTopic(ctx, []string{string(obj.Token)}, cu.ID.toString()); err != nil {
-			Warnf("attempted to update sub: %q: %v", obj.Token, err)
+			Warnf(ctx, "attempted to update sub: %q: %v", obj.Token, err)
 		}
 
 		go func() {
@@ -284,9 +284,9 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 			}
 			name, err := cl.FCM.Send(ctx, message)
 			if err != nil {
-				Warnf("attempted to send join notifications to: %v: %v", obj.Token, err)
+				Warnf(ctx, "attempted to send join notifications to: %v: %v", obj.Token, err)
 			}
-			Warnf("batch send name: %s", name)
+			Warnf(ctx, "batch send name: %s", name)
 		}()
 
 		if !start {
@@ -301,7 +301,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		}
 
 		g := G(new(GT))
-		cpid, err := g.Start(inv.Header)
+		cpid, err := g.Start(ctx, inv.Header)
 		if err != nil {
 			JErr(ctx, err)
 			return
@@ -309,7 +309,7 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 
 		if err := cl.FS.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
 			g.header().UpdatedAt = timestamppb.Now()
-			if err := cl.txSave(tx, g, cu.ID); err != nil {
+			if err := cl.txSave(ctx, tx, g, cu.ID); err != nil {
 				return err
 			}
 			return cl.txDeleteInvitation(tx, inv.id())
@@ -321,9 +321,9 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 		go func() {
 			responses, err := cl.sendNotifications(ctx, g, g.header().CPIDS)
 			if err != nil {
-				Warnf("attempted to send notifications to: %v: %v", g.header().CPIDS, err)
+				Warnf(ctx, "attempted to send notifications to: %v: %v", g.header().CPIDS, err)
 			}
-			Warnf("batch send response: %v", responses)
+			Warnf(ctx, "batch send response: %v", responses)
 		}()
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.startGameMessage(cpid)})
@@ -331,11 +331,11 @@ func (cl *GameClient[GT, G]) acceptHandler() gin.HandlerFunc {
 }
 
 // Returns (true, nil) if game should be started
-func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (inv *invitation) acceptWith(ctx context.Context, u *User, pwd, hash []byte) (bool, error) {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
-	err := inv.validateAcceptWith(u, pwd, hash)
+	err := inv.validateAcceptWith(ctx, u, pwd, hash)
 	if err != nil {
 		return false, err
 	}
@@ -347,9 +347,9 @@ func (inv *invitation) acceptWith(u *User, pwd, hash []byte) (bool, error) {
 	return false, nil
 }
 
-func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
+func (inv *invitation) validateAcceptWith(ctx context.Context, u *User, pwd, hash []byte) error {
+	Debugf(ctx, msgEnter)
+	defer Debugf(ctx, msgExit)
 
 	switch {
 	case len(inv.UserIDS) >= int(inv.NumPlayers):
@@ -359,7 +359,7 @@ func (inv *invitation) validateAcceptWith(u *User, pwd, hash []byte) error {
 	case len(hash) != 0:
 		err := bcrypt.CompareHashAndPassword(hash, pwd)
 		if err != nil {
-			Warnf("%v", err.Error())
+			Warnf(ctx, "%v", err.Error())
 			return fmt.Errorf("%s provided incorrect password for Game %s: %w",
 				u.Name, inv.Title, ErrValidation)
 		}
@@ -380,8 +380,8 @@ func (h Header) startGameMessage(pid PID) string {
 
 func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		inv, err := cl.getInvitation(ctx)
 		if err != nil {
@@ -414,7 +414,7 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 		}
 
 		if err := cl.removeSubs(ctx, inv.id(), cu.ID); err != nil {
-			Warnf("error removing subs for %v: %v", cu.ID, err)
+			Warnf(ctx, "error removing subs for %v: %v", cu.ID, err)
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{"Message": inv.dropGameMessage(cu)})
@@ -422,9 +422,6 @@ func (cl *GameClient[GT, G]) dropHandler() gin.HandlerFunc {
 }
 
 func (inv *invitation) drop(u *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	if err := inv.validateDrop(u); err != nil {
 		return err
 	}
@@ -434,9 +431,6 @@ func (inv *invitation) drop(u *User) error {
 }
 
 func (inv *invitation) validateDrop(u *User) error {
-	Debugf(msgEnter)
-	defer Debugf(msgExit)
-
 	switch {
 	case inv.Status != Recruiting:
 		return fmt.Errorf("game is no longer recruiting, thus %s can't drop: %w", u.Name, ErrValidation)
@@ -499,8 +493,8 @@ type detail struct {
 
 func (cl *GameClient[GT, G]) detailsHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		Debugf(msgEnter)
-		defer Debugf(msgExit)
+		Debugf(ctx, msgEnter)
+		defer Debugf(ctx, msgExit)
 
 		inv, err := cl.getInvitation(ctx)
 		if err != nil {
