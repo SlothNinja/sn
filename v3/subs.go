@@ -126,7 +126,7 @@ func (cl *GameClient[GT, G]) updateSubs(ctx *gin.Context, gid string, token SubT
 	return nil
 }
 
-// mcGetSubscription attempts to pull subscriptoin tokens from cache
+// mcGetSubscription attempts to pull subscription tokens from cache
 func (cl *GameClient[GT, G]) mcGetSubscriptions(ctx context.Context, gid string, uid UID) (*subscriptions, bool) {
 	Debugf(ctx, msgEnter)
 	defer Debugf(ctx, msgExit)

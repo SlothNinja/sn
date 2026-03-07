@@ -46,7 +46,7 @@ func NewClient(ctx context.Context, opts ...Option) *Client {
 		cl = opt(cl)
 	}
 
-	// Initalize
+	// Initialize
 	return cl.initCache().
 		initRouter().
 		initSession(ctx).

@@ -132,7 +132,7 @@ func (pid PID) ToUIndex() UIndex {
 // NoPID corresponds to the zero value for PID and represents the absence of a player id
 const NoPID PID = 0
 
-// PIDS returns the player identiers for the players slice
+// PIDS returns the player identifiers for the players slice
 func (ps Players[T, P]) PIDS() []PID {
 	return pie.Map(ps, func(p P) PID { return p.PID() })
 }

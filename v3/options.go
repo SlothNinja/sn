@@ -65,7 +65,7 @@ func (cl *Client) GetURL() string {
 
 // WithFrontEndURL sets the URL for the front end of the service, with protocol but without port.
 // For example, https://www.slothninja.com
-// If not set via WithFrontEndURL or via FE_URL environment variable, fallsback to WithURL value
+// If not set via WithFrontEndURL or via FE_URL environment variable, falls back to WithURL value
 func WithFrontEndURL(url string) Option {
 	return func(cl *Client) *Client {
 		cl.frontEndURL = url
@@ -87,7 +87,7 @@ func (cl *Client) GetFrontEndURL() string {
 
 // WithBackEndURL sets the URL for the back end of the service, with protocol but without port.
 // For example, https://www.slothninja.com
-// If not set via WithBackEndURL or via BE_URL environment variable, fallsback to WithURL value
+// If not set via WithBackEndURL or via BE_URL environment variable, falls back to WithURL value
 func WithBackEndURL(url string) Option {
 	return func(cl *Client) *Client {
 		cl.backEndURL = url
@@ -134,7 +134,7 @@ func (cl *Client) GetPort() string {
 
 // WithFrontEndPort sets the port for the front end of the service.
 // If not set via WithFrontEndPort, the FE_PORT environment variable, or the PORT environment variable,
-// then the front end port fallsback to the WithPort value
+// then the front end port falls back to the WithPort value
 func WithFrontEndPort(port string) Option {
 	return func(cl *Client) *Client {
 		cl.frontEndPort = port
@@ -156,7 +156,7 @@ func (cl *Client) GetFrontEndPort() string {
 
 // WithBackEndPort sets the port for the back end of the service.
 // If not set via WithBackEndPort, the BE_PORT environment variable, or the PORT environment variable,
-// then the back end port fallsback to the WithPort value
+// then the back end port falls back to the WithPort value
 func WithBackEndPort(port string) Option {
 	return func(cl *Client) *Client {
 		cl.backEndPort = port

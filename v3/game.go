@@ -79,12 +79,14 @@ func getID(ctx *gin.Context) string {
 }
 
 func getUID(ctx *gin.Context) (UID, error) {
-	obj := struct{ UID UID }{}
+	const empty = -1
+	obj := struct{ UID UID }{empty}
 	if err := ctx.ShouldBindBodyWithJSON(&obj); err != nil {
 		return 0, err
 	}
-	if obj.UID == noUID {
-		return 0, fmt.Errorf("uid cannot be zero: %w", ErrValidation)
+
+	if obj.UID == empty {
+		return 0, fmt.Errorf("uid cannot be empty: %w", ErrValidation)
 	}
 	return obj.UID, nil
 }
@@ -175,8 +177,8 @@ func (g *Game[S, T, P]) CurrentPlayer() P {
 	return pie.First(g.CurrentPlayers())
 }
 
-// CurrentPlayerFor returns player asssociated with user if such player is current player
-// CurrentPlayerFor also returns true if player asssociated with user is found.
+// CurrentPlayerFor returns player associated with user if such player is current player
+// CurrentPlayerFor also returns true if player associated with user is found.
 // Otherwise, returns false.
 func (g *Game[S, T, P]) CurrentPlayerFor(ctx context.Context, u *User) (P, bool) {
 	Debugf(ctx, msgEnter)

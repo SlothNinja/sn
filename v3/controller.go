@@ -7,7 +7,7 @@ import (
 )
 
 // IsProduction returns true if NODE_ENV environment variable is equal to "production".
-// GAE sets NODE_ENV environement to "production" on deployment.
+// GAE sets NODE_ENV environment to "production" on deployment.
 // NODE_ENV can be overridden in app.yaml configuration.
 func IsProduction() bool {
 	return os.Getenv("NODE_ENV") == "production"
