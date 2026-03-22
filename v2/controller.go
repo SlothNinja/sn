@@ -407,15 +407,15 @@ func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, 
 
 	q := datastore.
 		NewQuery(opt.Kind).
-		Filter("Status=", int(opt.Status)).
+		FilterField("Status", "=", int(opt.Status)).
 		Order("-UpdatedAt")
 
 	if opt.Type != All && opt.Type != NoType {
-		q = q.Filter("Type=", int(opt.Type))
+		q = q.FilterField("Type", "=", int(opt.Type))
 	}
 
 	if opt.UserID != 0 {
-		q = q.Filter("UserIDS=", opt.UserID)
+		q = q.FilterField("UserIDS", "=", opt.UserID)
 	}
 
 	cnt, err := cl.DS.Count(ctx, q)
@@ -434,6 +434,7 @@ func (cl *Client) GamesIndex(ctx context.Context, opt GOptions) ([]*IndexEntry, 
 	for i := 0; i < items; i++ {
 		var e IndexEntry
 		_, err := it.Next(&e)
+		cl.Log.Debugf("e[%d] %v\n", i, e)
 		if err == iterator.Done {
 			break
 		}
@@ -480,67 +481,68 @@ func (e *IndexEntry) id() int64 {
 
 // MarshalJSON implements json.Marshaler interface
 func (e IndexEntry) MarshalJSON() ([]byte, error) {
-
 	data := make(map[string]interface{})
 	for _, p := range e.Properties {
 		switch p.Name {
 		case "CreatorID":
-			data["creatorId"] = p.Value
+			data["CreatorID"] = p.Value
 		case "CreatorKey":
-			data["creatorKey"] = p.Value
+			data["CreatorKey"] = p.Value
 		case "CreatorName":
-			data["creatorName"] = p.Value
+			data["CreatorName"] = p.Value
 		case "CreatorEmailHash":
-			data["creatorEmailHash"] = p.Value
+			data["CreatorEmailHash"] = p.Value
 		case "CreatorGravType":
-			data["creatorGravType"] = p.Value
+			data["CreatorGravType"] = p.Value
+		case "NumPlayers":
+			data["NumPlayers"] = p.Value
 		case "Type":
-			data["type"] = p.Value
+			data["Type"] = p.Value
 		case "Title":
-			data["title"] = p.Value
+			data["Title"] = p.Value
 		case "UserIDS":
-			data["userIds"] = p.Value
+			data["UserIDS"] = p.Value
 		case "UserNames":
-			data["userNames"] = p.Value
+			data["UserNames"] = p.Value
 		case "UserEmailHashes":
-			data["userEmailHashes"] = p.Value
+			data["UserEmailHashes"] = p.Value
 		case "UserGravTypes":
-			data["userGravTypes"] = p.Value
+			data["UserGravTypes"] = p.Value
 		case "UserKeys":
-			data["userKeys"] = p.Value
+			data["UserKeys"] = p.Value
 		case "Password":
-			data["password"] = p.Value
+			data["Password"] = p.Value
 		case "PasswordHash":
-			data["passwordHash"] = p.Value
+			data["PasswordHash"] = p.Value
 		case "UpdatedAt":
-			data["updatedAt"] = p.Value
+			data["UpdatedAt"] = p.Value
 		case "CPUserIndices":
-			data["cpUserIndices"] = p.Value
+			data["CPUserIndices"] = p.Value
 		case "CPIDS":
-			data["cpids"] = p.Value
+			data["CPIDS"] = p.Value
 		case "WinnerIDS":
-			data["winnerIndices"] = p.Value
+			data["WinnerIndices"] = p.Value
 		case "WinnerKeys":
-			data["winnerKeys"] = p.Value
+			data["WinnerKeys"] = p.Value
 		}
 	}
 
 	data["key"] = e.Key
 	data["id"] = e.id()
 
-	password, ok := data["password"].(string)
+	password, ok := data["Password"].(string)
 	if ok {
-		passwordHash, ok := data["passwordHash"].([]byte)
+		passwordHash, ok := data["PasswordHash"].([]byte)
 		if ok {
 			data["public"] = (len(password) == 0) && (len(passwordHash) == 0)
 		}
 	}
-	delete(data, "password")
-	delete(data, "passwordHash")
+	delete(data, "Password")
+	delete(data, "PasswordHash")
 
-	updatedAt, ok := data["updatedAt"].(time.Time)
+	updatedAt, ok := data["UpdatedAt"].(time.Time)
 	if ok {
-		data["lastUpdated"] = LastUpdated(updatedAt)
+		data["LastUpdated"] = LastUpdated(updatedAt)
 	}
 
 	return json.Marshal(data)
