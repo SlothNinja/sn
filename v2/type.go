@@ -38,8 +38,10 @@ func TypeFrom(c *gin.Context) (t Type) {
 	return
 }
 
-type Type int
-type GTypes []Type
+type (
+	Type   int
+	GTypes []Type
+)
 
 // Do not alphabetize or otherwise reorder the following
 // Existing games in datastore rely upon the currently assigned values
@@ -52,6 +54,7 @@ const (
 	GOT
 	Indonesia
 	Gettysburg
+	Plateau
 
 	All Type = 10000
 )
@@ -68,6 +71,7 @@ var Types = GTypes{
 	GOT,
 	Indonesia,
 	Tammany,
+	Plateau,
 }
 
 type TypeMap map[Type]string
@@ -79,6 +83,7 @@ var TypeStrings = TypeMap{
 	GOT:        "Guild Of Thieves",
 	Indonesia:  "Indonesia",
 	Gettysburg: "Gettysburg",
+	Plateau:    "Le Plateau",
 	All:        "All",
 }
 
@@ -89,6 +94,7 @@ var TypeSStrings = TypeMap{
 	GOT:        "GOT",
 	Indonesia:  "Indonesia",
 	Gettysburg: "Gettysburg",
+	Plateau:    "Plateau",
 	All:        "All",
 }
 
@@ -99,6 +105,7 @@ var ToType = map[string]Type{
 	"got":        GOT,
 	"indonesia":  Indonesia,
 	"gettysburg": Gettysburg,
+	"plateau":    Plateau,
 	"all":        All,
 }
 
