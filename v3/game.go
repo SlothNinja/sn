@@ -28,6 +28,7 @@ type Game[S, PT any, P playerer[PT]] struct {
 type Gamer[G any] interface {
 	Viewer[G]
 	Comparer
+	InvitationHeaderer
 
 	header() *Header
 	id() string
@@ -129,13 +130,25 @@ func (g *Game[S, T, P]) PlayerByUID(uid UID) P {
 // IndexForPlayer returns the index for the player and bool indicating whether player found.
 // if not found, returns -1
 func (g *Game[S, T, P]) IndexForPlayer(p1 P) int {
-	return pie.FindFirstUsing(g.Players, func(p2 P) bool { return p1.PID() == p2.PID() })
+	return indexForPlayer(g.Players, p1)
+}
+
+// indexForPlayer returns the index for the player p in players ps and bool indicating whether player found.
+// if not found, returns -1
+func indexForPlayer[PT any, P playerer[PT]](ps []P, p1 P) int {
+	return pie.FindFirstUsing(ps, func(p2 P) bool { return p1.PID() == p2.PID() })
 }
 
 // PlayerByIndex returns player at associated index in Players slice
 // PlayerByIndex treats Players slice as a circular buffer, thus permitting indices larger than length and indices less than 0
 func (g *Game[S, T, P]) PlayerByIndex(i int) P {
-	l := len(g.Players)
+	return playerByIndex(g.Players, i)
+}
+
+// playerByIndex returns player at associated index in Players slice
+// playerByIndex treats Players slice as a circular buffer, thus permitting indices larger than length and indices less than 0
+func playerByIndex[PT any, P playerer[PT]](ps []P, i int) P {
+	l := len(ps)
 	if l < 1 {
 		var zerop P
 		return zerop
@@ -143,9 +156,9 @@ func (g *Game[S, T, P]) PlayerByIndex(i int) P {
 
 	r := i % l
 	if r < 0 {
-		return g.Players[l+r]
+		return ps[l+r]
 	}
-	return g.Players[r]
+	return ps[r]
 }
 
 // Compare implements Comparer interface.
@@ -296,14 +309,26 @@ func (g *Game[S, T, P]) UIDSForPIDS(pids []PID) []UID {
 // NextPlayer returns player after cp that satisfies all tests ts
 // if tests ts is empty, return player after cp
 func (g *Game[S, T, P]) NextPlayer(cp P, ts ...func(P) bool) P {
-	start := g.IndexForPlayer(cp) + 1
-	stop := start + g.Header.NumPlayers
+	return nextPlayer(g.Players, g.Header.NumPlayers, cp, ts...)
+}
+
+// PreviousPlayer returns player before cp that satisfies all tests ts
+// if tests ts is empty, return player before cp
+func (g *Game[S, T, P]) PreviousPlayer(cp P, ts ...func(P) bool) P {
+	return nextPlayer(pie.Reverse(g.Players), g.Header.NumPlayers, cp, ts...)
+}
+
+// nextPlayer returns player p after cp in players ps that satisfies all tests ts
+// if tests ts is empty, return player after cp
+func nextPlayer[PT any, P playerer[PT]](ps []P, numPlayers int, cp P, ts ...func(P) bool) P {
+	start := indexForPlayer(ps, cp) + 1
+	stop := start + numPlayers
 
 	// g.playerByIndex uses the players slice as-if it were circular buffer
 	// start is one index after cp
 	// stop is num players later, thus one pass through circular buffer
 	for i := start; i <= stop; i++ {
-		np := g.PlayerByIndex(i)
+		np := playerByIndex(ps, i)
 		if pie.All(ts, func(t func(P) bool) bool { return t(np) }) {
 			return np
 		}

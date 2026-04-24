@@ -118,13 +118,25 @@ func (cl *GameClient[GT, G]) txDeleteInvitation(tx *firestore.Transaction, id st
 	return nil
 }
 
+// InvitationHeaderer interface provides an optional hook for setting Header defaults
+// of generated invitations.
+type InvitationHeaderer interface {
+	InvitationHeader(*gin.Context) Header
+}
+
+// InvitationHeader provides a default implementation of the InvitationHeaderer interface
+// The default implementation simply provides a silly name title for the invitation header.
+func (g *Game[S, T, P]) InvitationHeader(_ *gin.Context) Header {
+	return Header{Title: randomdata.SillyName()}
+}
+
 func (cl *GameClient[GT, G]) newInvitationHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		Debugf(ctx, msgEnter)
 		defer Debugf(ctx, msgExit)
 
-		var inv invitation
-		inv.Title = randomdata.SillyName()
+		g := G(new(GT))
+		inv := invitation{g.InvitationHeader(ctx)}
 
 		ctx.JSON(http.StatusOK, gin.H{"Invitation": inv})
 	}
