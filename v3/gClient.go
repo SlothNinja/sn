@@ -195,7 +195,7 @@ func (cl *GameClient[GT, G]) endGame(ctx *gin.Context, g G, uid UID) error {
 	g.header().Phase = "Game Over"
 	g.header().Places = placesSMap
 
-	stats, err := cl.getUStats(ctx, g.header().UserIDS...)
+	stats, err := cl.getUStats(ctx, g.playerUIDS()...)
 	if err != nil {
 		return err
 	}
